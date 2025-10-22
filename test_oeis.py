@@ -10,14 +10,13 @@ __license__ = "LGPL"
 __credits__ = []
 
 import os
-import sys
 import logging
 import re
 
-from goulib import itertools2, decorators
+from goulib import decorators
 from goulib.tests import *
 
-from oeis import *
+from oeis import oeis
 from database import database
 
 path = os.path.dirname(os.path.abspath(__file__))
@@ -25,24 +24,29 @@ path = os.path.dirname(os.path.abspath(__file__))
 slow = []  # list of slow sequences
 
 
-def assert_generator(f, ref, name, timeout=10):
+def test(f, ref, name, timeout=1.):
     ref = list(ref)
     n = len(ref)
     timeout, f.timeout = f.timeout, timeout  # save Sequence's timeout
-    l = []
+    liste = []
     try:
         for i, x in enumerate(f):
-            l.append(x)
-            if i > n:
+            if i >= n:
                 break
+            if x != ref[i]:
+                raise ValueError(
+                    '%s: term %d: got %s, expected %s' % (name, i, x, ref[i]))
+            liste.append(x)
+
     except decorators.TimeoutError:
         if i < min(10, n / 2):
             slow.append((i, name, f.desc))
             logging.warning('%s timeout after only %d loops' % (name, i))
-        elif _DEBUG:
+        else:
             logging.info('%s timeout after %d loops' % (name, i))
     finally:
         f.timeout = timeout  # restore Sequence's timeout
+    return liste
 
 
 def data(s):
@@ -64,10 +68,14 @@ def data(s):
         logging.info('downloading b%s.txt' % s2)
     res = []
     for line in file:  # files are iterable
-        c = chr(line[0])
+        # urlopen yields bytes in py3, local open() yields str; normalize to str
+        if isinstance(line, bytes):
+            line = line.decode('utf-8', errors='replace')
+        c = line[0]
         if c == '#':
             continue  # skip comment
-        m = re.search(b'(\d+)\s+(-?\d+)', line)
+        # use a string regex (works on decoded text)
+        m = re.search(r"(\d+)\s+(-?\d+)", line)
         if m:
             m = m.groups()
             if len(m) == 2:
@@ -85,40 +93,17 @@ def check(f, s=None):
     except:
         name, f = f, globals()[f]
     # to break as soon as an error happens
-    assert_generator(f, s or name, name=name, timeout=None)
+    test(f, s or name, name=name, timeout=None)
 
 
-class TestOEIS:
-
-    @classmethod
-    def setup_class(cls):
-        pass
-
-    @classmethod
-    def teardown_class(cls):
-        global slow
-        print('slower Sequences:')
-        slow.sort()
-        for (i, name, desc) in slow:
-            print(i, name, desc)
-
-    # http://stackoverflow.com/questions/32899/how-to-generate-dynamic-parametrized-unit-tests-in-python
-    # http://nose.readthedocs.org/en/latest/writing_tests.html
-    # this is ABSOLUTELY FANTASTIC !
-    def test_generator(self):
-        for name in sorted(oeis.keys()):  # test in sorted order to spot slows faster
-            logging.info(name)
-            time_limit = 0.1  # second
-            from functools import partial
-            f = partial(assert_generator, oeis[name], data(
-                name), name, time_limit)
-            f.description = str(oeis[name]) + '\n'
-            yield (f,)
-
-
-_DEBUG = True
 if __name__ == "__main__":
-    if _DEBUG:
-        runmodule(logging.DEBUG, argv=['-x', '-v'])
-    else:
-        runmodule()
+    for name in sorted(oeis.keys()):  # test in sorted order to spot slows faster
+        logging.info(name)
+        time_limit = 0.1  # second
+        result = test(oeis[name], data(
+            name), name, time_limit)
+        print(str(oeis[name]), result)
+    print('slower Sequences:')
+    slow.sort()
+    for (i, name, desc) in slow:
+        print(i, name, desc)

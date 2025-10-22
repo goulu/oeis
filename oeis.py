@@ -16,7 +16,9 @@ import goulib.itertools2 as itertools2
 from goulib import decorators
 from sequence import Sequence
 import goulib.math2 as math2
-timout = 10
+
+timeout = 10  # set a default timeout for sequences' generators
+
 A000004 = Sequence(repeat(0), lambda _: 0, lambda x: x ==
                    0, desc='The zero sequence')
 A000007 = Sequence(None, lambda n: 0 ** n, lambda x: x in (0, 1),
@@ -29,8 +31,15 @@ A005408 = Sequence(count(1, 2), lambda n: 2 * n + 1, lambda x: x %
                    2 == 1, desc='The odd numbers: a(n) = 2n+1.')
 A005843 = Sequence(count(0, 2), lambda n: 2 * n, lambda x: x %
                    2 == 0, desc='The even numbers: a(n) = 2n ')
-A001057 = Sequence(1, lambda n: -n // 2 + 1 if n % 2 else n // 2, lambda _: True,
-                   desc='Canonical enumeration of integers: interleaved positive and negative integers with zero prepended.')
+A001057 = Sequence(
+    1,
+    lambda n: -n // 2 + 1 if n % 2 else n // 2,
+    lambda _: True,
+    desc=(
+        'Canonical enumeration of integers: interleaved positive and negative '
+        'integers with zero prepended.'
+    ),
+)
 A008587 = Sequence(count(0, 5), lambda n: 5 * n, lambda n: n %
                    5 == 0, 'Multiples of 5')
 A008589 = Sequence(count(0, 7), lambda n: 7 * n, lambda n: n %
@@ -52,8 +61,14 @@ A000225, A003462, A002450, A003463, A003464, A023000, A023001, A002452, A002275 
     base), lambda n: math2.repunit(n, base), desc='a(n) = (%d^n - 1)/%d.' % (base, base - 1)) for base in range(2, 11))
 A002275.desc = 'Repunits: (10^n - 1)/9. Often denoted by R_n.'
 A000225.desc = 'a(n) = 2^n - 1. (Sometimes called Mersenne numbers, although that name is usually reserved for A001348.'
-A016123, A016125, A091030, A135519, A135518, A131865 = (Sequence(itertools2.drop(1, math2.repunit_gen(
-    base)), lambda n: math2.repunit(n + 1, base), desc='a(n) = (%d^n - 1)/%d.' % (base, base - 1)) for base in range(11, 17))
+A016123, A016125, A091030, A135519, A135518, A131865 = (
+    Sequence(
+        itertools2.drop(1, math2.repunit_gen(base)),
+        lambda n: math2.repunit(n + 1, base),
+        desc='a(n) = (%d^n - 1)/%d.' % (base, base - 1),
+    )
+    for base in range(11, 17)
+)
 A024023 = Sequence(math2.repunit_gen(3, 2), lambda n: math2.repunit(
     n + 1, 3), desc='a(n) = 3^n - 1.')
 A048328 = A003462 | A024023
@@ -252,7 +267,14 @@ A023086, A023087, A023088, A023089, A023090, A023091, A023092, A023093 = [
 
 
 def first_anagram(f):
-    return Sequence(f + 1, lambda n: itertools2.first(anagram_gen(f, base=n, start=1)), desc='a(n) is least k such that k and %dk are anagrams in base n (written in base 10).' % f)
+    return Sequence(
+        f + 1,
+        lambda n: itertools2.first(anagram_gen(f, base=n, start=1)),
+        desc=(
+            'a(n) is least k such that k and %dk are anagrams in base n '
+            '(written in base 10).' % f
+        ),
+    )
 
 
 '''too slow
@@ -411,7 +433,13 @@ A020639 = Sequence(
 A006530 = Sequence(
     1, math2.gpf, desc='Gpf(n): greatest prime dividing n, for n >= 2; a(1)=1. ')
 A008683 = Sequence(
-    1, math2.moebius, desc='Möbius (or Moebius) function mu(n). mu(1) = 1; mu(n) = (-1)^k if n is the product of k different primes; otherwise mu(n) = 0.')
+    1,
+    math2.moebius,
+    desc=(
+        'Möbius (or Moebius) function mu(n). mu(1) = 1; mu(n) = (-1)^k if n is '
+        'the product of k different primes; otherwise mu(n) = 0.'
+    ),
+)
 
 
 def is_A055932(n):
@@ -477,7 +505,7 @@ A060305 = A000040.apply(math2.pisano_period,
                         desc='Period of Fibonacci numbers mod prime(n).')
 A134816 = Sequence(math2.recurrence(
     [0, 1, 1], [1, 1, 1]), desc="Padovan's spiral numbers.")
-A000931 = Sequence(math2.recurrence([0, 1, 1], [
+A000931 = Sequence(math2.recurrence([0, 0, 1], [
     1, 0, 0]), desc='Padovan sequence: a(n) = a(n-2) + a(n-3) with a(0)=1, a(1)=a(2)=0. ')
 A050935 = Sequence(math2.recurrence(
     [1, 0, -1], [0, 0, 1]), desc='a(1)=0, a(2)=0, a(3)=1, a(n+1) = a(n) - a(n-2).')
@@ -513,7 +541,11 @@ A057166 = Sequence(map(operator.itemgetter(
 A000041 = Sequence(None, math2.partition,
                    desc='number of partitions of n (the partition numbers)')
 A000009 = Sequence(None, math2.partitionsQ,
-                   desc='Expansion of Product_{m >= 1} (1 + x^m);     number of partitions of n into distinct parts;     number of partitions of n into odd parts (if n > 0). ')
+                   desc=(
+                       'Expansion of Product_{m >= 1} (1 + x^m); '
+                       'number of partitions of n into distinct parts; '
+                       'number of partitions of n into odd parts (if n > 0). '
+                   ))
 A051005 = A000009.filter(math2.is_prime)
 A051005.desc = 'prime values of PartitionsQ.'
 
@@ -556,7 +588,11 @@ A007953 = Sequence(None, math2.digsum, True,
 A000120 = Sequence(None, lambda n: bin(n).count(
     '1'), True, "1's-counting sequence: number of 1's in binary expansion of n")
 A010060 = Sequence(None, lambda n: math2.digsum(n, base=2) % 2, None)
-A010060.desc = "Thue-Morse sequence: let A_k denote the first 2^k terms; then A_0 = 0 and for k >= 0, A_{k+1} = A_k B_k, where B_k is obtained from A_k by interchanging 0's and 1's."
+A010060.desc = (
+    "Thue-Morse sequence: let A_k denote the first 2^k terms; then A_0 = 0 and "
+    "for k >= 0, A_{k+1} = A_k B_k, where B_k is obtained from A_k by interchanging "
+    "0's and 1's."
+)
 A001969 = Sequence(None, None, lambda n: math2.digsum(n, base=2) % 2 == 0)
 A001969.desc = "Evil numbers: numbers with an even number of 1's in their binary expansion."
 
@@ -581,7 +617,10 @@ def sumdigpow(p, desc=None):
 
 A003132 = sumdigpow(2, desc='Sum of squares of digits of n. ')
 A007770 = Sequence(None, None, math2.is_happy,
-                   desc='Happy numbers: numbers whose trajectory under iteration of sum of squares of digits map (see A003132) includes 1.')
+                   desc=(
+                       'Happy numbers: numbers whose trajectory under iteration of sum '
+                       'of squares of digits map (see A003132) includes 1.'
+                   ))
 A055012 = sumdigpow(
     3, desc='Sum of cubes of the digits of n written in base 10.')
 
@@ -721,7 +760,9 @@ A005151 = Sequence(
 )
 A006960 = Sequence(map(operator.itemgetter(0), math2.lychrel_seq(196)))
 A023108 = Sequence(None, None, math2.is_lychrel)
-'Positive integers which apparently never result in a palindrome\nunder repeated applications of the function f(x) = x + (x with digits reversed).\nAlso called Lychrel numbers\n'
+'Positive integers which apparently never result in a palindrome\n'
+'under repeated applications of the function f(x) = x + (x with digits reversed).\n'
+'Also called Lychrel numbers\n'
 
 
 def a023109():
@@ -757,7 +798,8 @@ A023109 = Sequence(a023109)
 
 
 def a033665(n):
-    """Number of 'Reverse and Add' steps needed to reach a palindrome starting at n, or -1 if n never reaches a palindrome."""
+    """Number of 'Reverse and Add' steps needed to reach a palindrome starting at
+    n, or -1 if n never reaches a palindrome."""
     limit = 96
     n = math2.lychrel_count(n, limit)
     return -1 if n >= limit else n
@@ -835,7 +877,8 @@ A014080 = Sequence(0, None, lambda n: dfs(
 A003945 = Sequence(math2.recurrence(
     [2], [1, 3]), desc='Expansion of g.f. (1+x)/(1-2*x).')
 A285361 = Sequence(math2.recurrence((8, -24, 34, -23, 6), (1, 11, 64, 282, 1071)), lambda n: (3 **
-                                                                                              (n + 3) - 5 * 2 ** (n + 4) + 4 * n ** 2 + 26 * n + 53) // 4, desc='The number of tight 3 X n pavings.')
+                                                                                              (n + 3) - 5 * 2 ** (n + 4) + 4 * n ** 2 + 26 * n + 53) // 4,
+                   desc='The number of tight 3 X n pavings.')
 A088002 = Sequence(math2.recurrence((0, -1, 0, 0, -1),
                                     (1, 0, 0, 0, 0)), desc='Expansion of (1+x^2)/(1+x^2+x^5)')
 
@@ -847,8 +890,15 @@ def fA051885(n):
 
 A051885 = Sequence(None, fA051885, None,
                    'Smallest number whose sum of digits is n.')
-A054320 = Sequence(math2.recurrence([-1, 10], [1, 11]), lambda n: math2.rint((math2.sqrt(6) - 2) / 4 * (5 + 2 * math2.sqrt(6)) ** (n + 1) - (
-    math2.sqrt(6) + 2) / 4 * (5 - 2 * math2.sqrt(6)) ** (n + 1)), lambda x: math2.is_square(6 * x ** 2 + 3), 'Expansion of g.f.: (1 + x)/(1 - 10*x + x^2).')
+A054320 = Sequence(math2.recurrence([-1, 10], [1, 11]),
+                   lambda n: math2.rint((math2.sqrt(6) - 2) / 4 *
+                                        (5 + 2 * math2.sqrt(6)) ** (n + 1) - (
+                       math2.sqrt(6) + 2) / 4 * (5 - 2 * math2.sqrt(6)) ** (n + 1)
+),
+    lambda x: math2.is_square(6 * x ** 2 + 3),
+    'Expansion of g.f.: (1 + x)/(1 - 10*x + x^2).')
+
+# make a dictionary of all sequences with their OEIS IDs
 seqs = globals().copy()
 oeis = {}
 for id in seqs:
@@ -857,6 +907,4 @@ for id in seqs:
         oeis[id] = seqs[id]
 
 if __name__ == '__main__':
-    timeout = None
-    for n in A005042:
-        print(n)
+    print(repr(A134816))

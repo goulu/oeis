@@ -51,7 +51,7 @@ class Sequence(object):
     def __repr__(self):
         if not self._repr:  # cache for speed
             # must be very quick for debugger
-            s = tests.pprint(self, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 0.001)
+            s = tests.pprint(self, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 1)
             self._repr = '%s = (%s)' % (self.name, s)
         return self._repr
 

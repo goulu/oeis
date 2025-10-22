@@ -9,21 +9,19 @@ __credits__ = ["https://oeis.org/"]
 
 import sqlite3
 import os
-import sys
 import logging
 
 from goulib import itertools2
-from goulib.tests import *
 
 
 class Database:
 
-    def __init__(self, dbpath):
-        dbexists = os.path.exists(dbpath)
+    def __init__(self, path):
+        dbexists = os.path.exists(path + '/oeis.db')
         try:
-            self.db = sqlite3.connect(dbpath)
+            self.db = sqlite3.connect(path + '/oeis.db')
             if not dbexists:
-                self.execute(open('create.sql', 'r').read())
+                self.execute(open(path + '/create.sql', 'r').read())
                 logging.info("tables created")
         except sqlite3.Error as error:
             logging.error("Error while connecting to sqlite", error)
@@ -65,7 +63,7 @@ class Database:
             except TypeError:
                 pass  # value is a generator, we'll store as much as possible
         
-        from Goulib.decorators import itimeout
+        from goulib.decorators import itimeout
         from multiprocessing import TimeoutError
         
         cursor = self.db.cursor()
@@ -79,8 +77,8 @@ class Database:
         except TimeoutError:
             pass
         finally:
-            cursor.close();
-            self.db.commit();
+            cursor.close()
+            self.db.commit()
             return i
 
     def __setitem__(self, key, value):
@@ -131,29 +129,14 @@ class Database:
 
 logging.basicConfig(level=logging.DEBUG)
 path = os.path.dirname(os.path.abspath(__file__))
-database = Database(path + '/oeis.db')
+database = Database(path)
 logging.info("SQLite DB Version : " + database.version)
 
-
-# from Goulib.tests import *
-
-
-class TestDatabase:
-
-    def setUp(self):
-        if 'A000045' not in database:
-            import oeis
-            database['A000045'] = oeis.A000045
-
-    def test_search(self):
-        res = database.search([3, 5, 8, 13])
-        assert_true(('A000045', 5) in res)
-
-
-_DEBUG = True
 if __name__ == "__main__":
     database.populate()
-    if _DEBUG:
-        runmodule(logging.DEBUG, argv=['-x', '-v'])
-    else:
-        runmodule()
+    # test
+    if 'A000045' not in database:
+        import oeis
+        database['A000045'] = oeis.A000045
+    res = database.search([3, 5, 8, 13])
+    assert ('A000045', 5) in res
