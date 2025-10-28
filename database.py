@@ -139,7 +139,7 @@ database = Database(path)
 logging.info("SQLite DB Version : " + database.version)
 
 if __name__ == "__main__":
-    database.populate()
+    # database.populate()
     # test
     if 'A000045' not in database:
         import oeis

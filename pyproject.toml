@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oeis"
+version = "0.0.9"
+authors = [
+    {name = "Philippe Guglielmetti", email = "goulib@goulu.net"},
+]
+description = "mini Encyclopedia of Integer Sequences (OEIS) "
+readme = "README.rst"
+requires-python = ">=3.11"
+keywords = ["math"]
+license = {file = "LICENSE"}
+classifiers = [
+        "Development Status :: 5 - Production/Stable",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3.9",
+        "Topic :: Scientific/Engineering",
+]
+
+[project]
+dependencies = [
+  "goulib",
+  "pytest",
+]

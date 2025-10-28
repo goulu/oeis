@@ -55,7 +55,7 @@ class Sequence(object):
             self._repr = '%s = (%s)' % (self.name, s)
         return self._repr
 
-    def save(self, filename, comment=None, n=1000, maxtime=10):
+    def save(self, filename, comment=None, n=1000, maxtime=60):
         with open(filename, 'wt') as f:
             from datetime import date
             comment = comment or "%s %s" % (self.desc, date.today())

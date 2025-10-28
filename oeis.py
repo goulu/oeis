@@ -765,8 +765,9 @@ A005151 = Sequence(
     desc='Summarize the previous term! (in increasing order). '
 )
 A006960 = Sequence(map(operator.itemgetter(0), math2.lychrel_seq(196)))
-A023108 = Sequence(None, None, math2.is_lychrel)
-'Positive integers which apparently never result in a palindrome\n'
+A023108 = Sequence(None, None, math2.is_lychrel).filter(
+    lambda x: not math2.is_palindromic(x))
+A023108.desc = 'Positive integers which apparently never result in a palindrome\n'
 'under repeated applications of the function f(x) = x + (x with digits reversed).\n'
 'Also called Lychrel numbers\n'
 
@@ -913,4 +914,4 @@ for id in seqs:
         oeis[id] = seqs[id]
 
 if __name__ == '__main__':
-    print(list(A023058[:20]))
+    print(list(A024406[381]))
