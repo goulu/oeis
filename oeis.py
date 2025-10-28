@@ -112,9 +112,9 @@ A051876 = Sequence(None, lambda n: math2.polygonal(24, n))
 A167149 = Sequence(0, lambda n: math2.polygonal(10000, n), 'myriagonal')
 A001110 = A000217.filter(
     math2.is_square, 'Square triangular numbers: numbers that are both triangular and square')
-A001110.iterf = math2.recurrence((35, -35, 1), (0, 1, 36))
-A001109 = A001110.apply(math2.isqrt, lambda n: n *
-                        n in A001110, desc='a(n)^2 is a triangular number')
+A001110.iterf = math2.recurrence((-1, 34), (0, 1), 2)
+A001109 = A001110.apply(math2.isqrt, lambda n: math2.isqrt(n) in A001110,
+                        desc='a(n)^2 is a triangular number')
 A003401 = Sequence(1, None, lambda n: math2.str_base(math2.totient(n), 2).count(
     '1') == 1, desc='Values of n for which a regular polygon with n sides can be constructed with ruler and compass')
 A004169 = Sequence(1, None, lambda n: math2.str_base(math2.totient(n), 2).count(
@@ -241,6 +241,7 @@ def anagram_gen(factor, base=10, start=0, inbase=False):
     if start == 0:
         yield 0
     step = [1, 1, 9, 9, 3, 9, 9, 3, 3, 9][factor] if base == 10 else 1
+    prev = -1
     for d in count(1):
         start = base ** d + (step - 1)
         end = math.ceil(base / factor) * base ** d
@@ -251,9 +252,12 @@ def anagram_gen(factor, base=10, start=0, inbase=False):
                     break
                 if a == b:
                     if inbase:
-                        yield math2.int_base(n, base)
+                        x = math2.int_base(n, base)
                     else:
-                        yield n
+                        x = n
+                    if x != prev:  # remove duplicates
+                        prev = x
+                        yield x
 
 
 '''too slow for now
@@ -317,7 +321,7 @@ A000720 = Sequence(1, lambda n: len(math2.sieve(n + 1, oneisprime=True)) - 1,
                    lambda n: True, desc='pi(n), the number of primes <= n. Sometimes called PrimePi(n)')
 A018239 = A006862.filter(
     math2.is_prime, desc='Primorial primes: form product of first k primes and add 1, then reject unless prime.')
-A007504 = A000040.accumulate()
+A007504 = A000040.accumulate(init=[0])
 A001223 = A000040.pairwise(operator.sub)
 A001223.desc = 'Prime gaps: differences between consecutive primes.'
 A030173 = A001223.sort()
@@ -505,8 +509,8 @@ A060305 = A000040.apply(math2.pisano_period,
                         desc='Period of Fibonacci numbers mod prime(n).')
 A134816 = Sequence(math2.recurrence(
     [0, 1, 1], [1, 1, 1]), desc="Padovan's spiral numbers.")
-A000931 = Sequence(math2.recurrence([0, 0, 1], [
-    1, 0, 0]), desc='Padovan sequence: a(n) = a(n-2) + a(n-3) with a(0)=1, a(1)=a(2)=0. ')
+A000931 = Sequence(math2.recurrence([1, 1, 0], [1, 0, 0]),
+                   desc='Padovan sequence: a(n) = a(n-2) + a(n-3) with a(0)=1, a(1)=a(2)=0. ')
 A050935 = Sequence(math2.recurrence(
     [1, 0, -1], [0, 0, 1]), desc='a(1)=0, a(2)=0, a(3)=1, a(n+1) = a(n) - a(n-2).')
 A006370 = Sequence(None, math2.collatz,
@@ -576,8 +580,8 @@ A002249 = Sequence(math2.lucasV(
     1, 2), desc='a(n) = a(n-1) - 2*a(n-2) with a(0) = 2, a(1) = 1.')
 A000129 = Sequence(math2.lucasU(
     2, -1), desc='Pell numbers: a(0) = 0, a(1) = 1; for n > 1, a(n) = 2*a(n-1) + a(n-2).')
-A001045 = Sequence(math2.recurrence([1, 2], [
-    0, 1]), desc='Jacobsthal sequence (or Jacobsthal numbers): a(n) = a(n-1) + 2*a(n-2), with a(0) = 0, a(1) = 1.')
+A001045 = Sequence(math2.recurrence([2, 1], [0, 1]),
+                   desc='Jacobsthal sequence (or Jacobsthal numbers): a(n) = a(n-1) + 2*a(n-2), with a(0) = 0, a(1) = 1.')
 A000142 = Sequence(math2.factorial_gen)
 A000142.desc = 'Factorial numbers: n! = 1*2*3*4*...*n order of symmetric group S_n, number of permutations of n letters.'
 A061006 = Sequence(1, lambda n: math2.mod_fac(n - 1, n))
@@ -627,6 +631,8 @@ A055012 = sumdigpow(
 
 def armstrong_gen():
     """generates narcissistic numbers, but not in sequence"""
+    for i in range(10):
+        yield i
     for k in count(1):
         a = [i ** k for i in range(10)]
         for b in itertools2.combinations_with_replacement(range(10), k):
@@ -907,4 +913,4 @@ for id in seqs:
         oeis[id] = seqs[id]
 
 if __name__ == '__main__':
-    print(repr(A134816))
+    print(list(A023058[:20]))

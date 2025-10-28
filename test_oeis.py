@@ -97,11 +97,12 @@ def check(f, s=None):
 
 
 if __name__ == "__main__":
-    for name in sorted(oeis.keys()):  # test in sorted order to spot slows faster
+    keys = oeis.keys()
+    for name in sorted(keys):  # test in sorted order to spot slows faster
         logging.info(name)
         time_limit = 0.1  # second
-        result = test(oeis[name], data(
-            name), name, time_limit)
+        ref = list(data(name))
+        result = test(oeis[name], ref, name, time_limit)
         print(str(oeis[name]), result)
     print('slower Sequences:')
     slow.sort()

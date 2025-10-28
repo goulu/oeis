@@ -91,7 +91,7 @@ class Sequence(object):
             else:
                 return itertools2.index(i, self)
         else:
-            return islice(self(), i.start, i.stop, i.step)
+            return islice(self, i.start, i.stop, i.step)
 
     def index(self, v):
         # assume sequence is growing
