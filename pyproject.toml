@@ -23,9 +23,14 @@ classifiers = [
         "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering",
 ]
-
-[project]
 dependencies = [
-  "goulib",
-  "pytest",
+    "goulib>=3.0.0",
+    "pytest>=8.0.0",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
 ]
