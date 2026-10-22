@@ -105,7 +105,7 @@ def parse_oeis_ast(filepath):
     return seq_definitions
 
 
-def compute_preview_and_terms(seq, max_terms=20, timeout_sec=0.2):
+def compute_preview_and_terms(seq, max_terms=60, timeout_sec=0.2):
     """Tente de générer les premiers termes de manière protégée avec un timeout."""
     terms = []
     try:
@@ -125,8 +125,9 @@ def compute_preview_and_terms(seq, max_terms=20, timeout_sec=0.2):
     finally:
         seq.timeout = orig_timeout
 
-    preview_str = ', '.join(str(t) for t in terms) if terms else ''
+    preview_str = ', '.join(str(t) for t in terms[:30]) if terms else ''
     return preview_str, terms
+
 
 
 def init_database():
@@ -190,7 +191,7 @@ def init_database():
         auxiliary_code = ast_info.get('auxiliary_code')
 
         # Calcul des premiers termes
-        preview_str, terms = compute_preview_and_terms(seq_obj, max_terms=20)
+        preview_str, terms = compute_preview_and_terms(seq_obj, max_terms=60)
 
         # Insertion ou remplacement de la séquence
         cursor.execute(

@@ -13,12 +13,15 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR
+from search_engine import OEISSearchEngine
 
 app = FastAPI(title="OEIS Python Clone", version="1.0.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'oeis.db')
 SEQUENCES_DIR = os.path.join(BASE_DIR, 'sequences')
+search_engine = OEISSearchEngine(DB_PATH)
+
 
 
 def get_db():
@@ -489,95 +492,90 @@ def index_page():
     return render_page("Accueil", home_content)
 
 
-@app.get("/{seq_id}", response_class=HTMLResponse)
-def sequence_page(seq_id: str):
-    """
-    Page d'affichage d'une séquence :
-    1. Vérifie si le fichier Markdown existe. S'il n'existe pas, le génère à partir de la BD.
-    2. Convertit le Markdown en HTML à la volée.
-    3. Présente la page avec le style OEIS et le widget interactif de test.
-    """
-    # Nettoyage de l'ID (ex: A45 -> A000045)
-    sid = seq_id.strip().upper()
-    if sid.startswith('A') and sid[1:].isdigit():
-        num = sid[1:]
-        sid = f"A{num.zfill(6)}"
-    else:
-        raise HTTPException(status_code=404, detail="Format d'identifiant OEIS invalide (attendu: Axxxxxx)")
-
-    md_file_path = os.path.join(SEQUENCES_DIR, f"{sid}.md")
-
-    # Si le fichier Markdown n'existe pas encore, on le génère depuis SQLite
-    if not os.path.exists(md_file_path):
-        conn = get_db()
-        try:
-            generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
-        except ValueError:
-            raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable dans la base.")
-        finally:
-            conn.close()
-
-    # Lecture du fichier Markdown
-    with open(md_file_path, "r", encoding="utf-8") as f:
-        md_text = f.read()
-
-    # Conversion à la volée du Markdown en HTML
-    # Extensions : tables, codehilite, toc, fenced_code
-    html_body = markdown.markdown(
-        md_text,
-        extensions=[
-            'markdown.extensions.extra',
-            'markdown.extensions.tables',
-            'markdown.extensions.fenced_code',
-            'markdown.extensions.toc'
-        ]
-    )
-
-    # Barre d'actions & Widget interactif
-    actions_bar = f"""
-    <div class="sequence-actions">
-        <div class="btn-group">
-            <a href="/raw/{sid}.md" target="_blank">&#128196; Voir Markdown brut</a>
-            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Page officielle OEIS.org</a>
-            <a href="/edit/{sid}">&#9998; Proposer une implémentation</a>
-        </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted);">
-            Source : <code>sequences/{sid}.md</code>
-        </div>
-    </div>
-    """
-
-    interactive_box = f"""
-    <div class="interactive-box">
-        <h4>&#9881; Console d'évaluation en direct de la Sequence</h4>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">
-            Testez directement dans cette page les fonctions <code>itemf(n)</code> et <code>containf(x)</code> :
+@app.get("/hints.html", response_class=HTMLResponse)
+def hints_page():
+    """Page d'aide à la recherche conforme à hints.html."""
+    hints_content = """
+    <div class="sequence-card">
+        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Aide et Syntaxe de Recherche</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+            Le moteur de recherche implémente les fonctionnalités décrites sur <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.
         </p>
-        <div class="test-controls">
-            <div class="test-input-group">
-                <label for="itemf-n">Calculer terme <em>n</em> :</label>
-                <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
-                <button type="button" onclick="testItemf('{sid}')" class="test-button">Calculer itemf(n)</button>
-            </div>
-            <div class="test-input-group">
-                <label for="containf-x">Tester nombre <em>x</em> :</label>
-                <input type="number" id="containf-x" value="55" class="test-input">
-                <button type="button" onclick="testContainf('{sid}')" class="test-button">Tester containf(x)</button>
-            </div>
-        </div>
-        <div id="test-result" class="test-output">Résultat prêt. Cliquez sur un bouton ci-dessus.</div>
+
+        <h3 style="color: var(--oeis-blue);">1. Recherche de séquences de nombres</h3>
+        <ul>
+            <li><strong>Termes consécutifs</strong> : entrez les termes séparés par des virgules ou des espaces :<br>
+                <code>1, 1, 2, 3, 5, 8, 13</code> ou <code>10946, 17711, 28657</code>
+            </li>
+            <li><strong>Wildcard d'un terme (<code>_</code>)</strong> : remplace un nombre quelconque :<br>
+                <code>1, 2, _, 4, 5</code>
+            </li>
+            <li><strong>Wildcard de sous-séquence (<code>__</code>)</strong> : remplace une suite de termes :<br>
+                <code>1, 2, __, 8, 13</code>
+            </li>
+        </ul>
+
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">2. Préfixes de champs</h3>
+        <ul>
+            <li><code>id:A000045</code> : recherche par identifiant direct</li>
+            <li><code>author:Philippe</code> : recherche par nom d'auteur</li>
+            <li><code>keyword:core</code> : recherche par mot-clé OEIS</li>
+        </ul>
+
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">3. Recherche plein texte</h3>
+        <p>Les mots simples sont recherchés dans les descriptions et métadonnées via l'index FTS5 :</p>
+        <ul>
+            <li><code>Fibonacci</code></li>
+            <li><code>square numbers</code></li>
+            <li><code>prime</code></li>
+        </ul>
     </div>
     """
+    return render_page("Aide Recherche", hints_content)
 
-    full_content = f"""
-    {actions_bar}
-    <div class="sequence-card markdown-body">
-        {html_body}
-        {interactive_box}
-    </div>
-    """
 
-    return render_page(f"{sid}", full_content, query=sid, seq_id=sid)
+@app.get("/search", response_class=HTMLResponse)
+def search_page(q: str = ""):
+    """Recherche conforme à hints.html via OEISSearchEngine."""
+    query = q.strip()
+    if not query:
+        return RedirectResponse(url="/")
+
+    # Si c'est un A-number direct sans préfixe
+    if query.upper().startswith('A') and query[1:].isdigit():
+        return RedirectResponse(url=f"/{query.upper()}")
+
+    # Exécution de la recherche via OEISSearchEngine
+    results = search_engine.search(query, limit=50)
+
+    res_html = f'<div class="sequence-card"><h2>Résultats de recherche pour : "{query}"</h2>'
+    if not results:
+        res_html += f"""
+        <p style="color: var(--text-muted); margin-top: 1rem;">
+            Aucune séquence trouvée pour cette requête.
+        </p>
+        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #64748b;">
+            Conseils : essayez avec moins de termes, vérifiez les virgules ou consultez <a href="/hints.html">l'aide à la recherche</a>.
+        </p>
+        """
+    else:
+        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{len(results)} résultat(s) trouvé(s) (classés par score de pertinence) :</p>'
+        for r in results:
+            score = r.get('score', 0)
+            score_badge = f'<span style="background: #e0f2fe; color: #0369a1; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.8rem; margin-left: 0.5rem;">+{score}</span>'
+            res_html += f"""
+            <div style="border-bottom: 1px solid var(--border-color); padding: 1rem 0;">
+                <div style="font-size: 1.15rem; font-weight: 700;">
+                    <a href="/{r['id']}" style="color: var(--primary); text-decoration: none;">{r['id']}</a> : {r['name']} {score_badge}
+                </div>
+                <div style="font-family: monospace; font-size: 0.85rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; margin: 0.4rem 0;">
+                    {r['terms']}
+                </div>
+                <div style="font-size: 0.82rem; color: #16a34a; font-weight: 500;">&check; {r.get('match_desc', '')}</div>
+            </div>
+            """
+    res_html += '</div>'
+    return render_page(f"Recherche: {query}", res_html, query=query)
 
 
 @app.get("/raw/{seq_id}.md", response_class=PlainTextResponse)
@@ -598,85 +596,6 @@ def raw_markdown(seq_id: str):
 
     with open(md_file_path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-@app.get("/search", response_class=HTMLResponse)
-def search_page(q: str = ""):
-    """Recherche par séquence ou mots-clés (plein texte et n-grams)."""
-    query = q.strip()
-    if not query:
-        return RedirectResponse(url="/")
-
-    # Si c'est un A-number
-    if query.upper().startswith('A') and query[1:].isdigit():
-        return RedirectResponse(url=f"/{query.upper()}")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    results = []
-
-    # 1. Vérification si la requête est une suite d'entiers (ex: 1, 1, 2, 3, 5, 8 ou 1 1 2 3 5 8)
-    nums = [int(p) for p in query.replace(',', ' ').split() if p.lstrip('-').isdigit()]
-    if len(nums) >= 3:
-        # Recherche par 3-gram
-        triplet = (nums[0], nums[1], nums[2])
-        h = hash(triplet)
-        cursor.execute("""
-            SELECT s.id, s.name, s.terms_preview, n.offset_pos 
-            FROM ngram_index n
-            JOIN sequences s ON n.sequence_id = s.id
-            WHERE n.ngram_hash = ?
-        """, (h,))
-        rows = cursor.fetchall()
-        for r in rows:
-            results.append({
-                'id': r['id'],
-                'name': r['name'],
-                'terms': r['terms_preview'],
-                'match': f"Match numérique sur 3-gram ({nums[0]}, {nums[1]}, {nums[2]}) à la position {r['offset_pos']}"
-            })
-
-    # 2. Recherche plein texte FTS5
-    if not results:
-        clean_q = ''.join(c if c.isalnum() else ' ' for c in query).strip()
-        if clean_q:
-            cursor.execute("""
-                SELECT s.id, s.name, s.terms_preview
-                FROM sequences_fts f
-                JOIN sequences s ON f.id = s.id
-                WHERE sequences_fts MATCH ?
-                LIMIT 30
-            """, (clean_q,))
-            rows = cursor.fetchall()
-            for r in rows:
-                results.append({
-                    'id': r['id'],
-                    'name': r['name'],
-                    'terms': r['terms_preview'],
-                    'match': "Correspondance textuelle"
-                })
-
-    conn.close()
-
-    res_html = f'<div class="sequence-card"><h2>Résultats de recherche pour : "{query}"</h2>'
-    if not results:
-        res_html += '<p style="color: var(--text-muted); margin-top: 1rem;">Aucune séquence trouvée pour cette requête.</p>'
-    else:
-        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{len(results)} résultat(s) trouvé(s) :</p>'
-        for r in results:
-            res_html += f"""
-            <div style="border-bottom: 1px solid var(--border-color); padding: 1rem 0;">
-                <div style="font-size: 1.15rem; font-weight: 700;">
-                    <a href="/{r['id']}" style="color: var(--primary); text-decoration: none;">{r['id']}</a> : {r['name']}
-                </div>
-                <div style="font-family: monospace; font-size: 0.85rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; margin: 0.4rem 0;">
-                    {r['terms']}
-                </div>
-                <div style="font-size: 0.8rem; color: #16a34a;">&check; {r['match']}</div>
-            </div>
-            """
-    res_html += '</div>'
-    return render_page(f"Recherche: {query}", res_html, query=query)
 
 
 @app.get("/api/sequence/{seq_id}/eval")
@@ -755,6 +674,97 @@ def api_update_sequence(
     }
 
 
+@app.get("/{seq_id}", response_class=HTMLResponse)
+def sequence_page(seq_id: str):
+    """
+    Page d'affichage d'une séquence :
+    1. Vérifie si le fichier Markdown existe. S'il n'existe pas, le génère à partir de la BD.
+    2. Convertit le Markdown en HTML à la volée.
+    3. Présente la page avec le style OEIS et le widget interactif de test.
+    """
+    # Nettoyage de l'ID (ex: A45 -> A000045)
+    sid = seq_id.strip().upper()
+    if sid.startswith('A') and sid[1:].isdigit():
+        num = sid[1:]
+        sid = f"A{num.zfill(6)}"
+    else:
+        raise HTTPException(status_code=404, detail="Format d'identifiant OEIS invalide (attendu: Axxxxxx)")
+
+    md_file_path = os.path.join(SEQUENCES_DIR, f"{sid}.md")
+
+    # Si le fichier Markdown n'existe pas encore, on le génère depuis SQLite
+    if not os.path.exists(md_file_path):
+        conn = get_db()
+        try:
+            generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable dans la base.")
+        finally:
+            conn.close()
+
+    # Lecture du fichier Markdown
+    with open(md_file_path, "r", encoding="utf-8") as f:
+        md_text = f.read()
+
+    # Conversion à la volée du Markdown en HTML
+    html_body = markdown.markdown(
+        md_text,
+        extensions=[
+            'markdown.extensions.extra',
+            'markdown.extensions.tables',
+            'markdown.extensions.fenced_code',
+            'markdown.extensions.toc'
+        ]
+    )
+
+    # Barre d'actions & Widget interactif
+    actions_bar = f"""
+    <div class="sequence-actions">
+        <div class="btn-group">
+            <a href="/raw/{sid}.md" target="_blank">&#128196; Voir Markdown brut</a>
+            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Page officielle OEIS.org</a>
+            <a href="/edit/{sid}">&#9998; Proposer une implémentation</a>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
+            Source : <code>sequences/{sid}.md</code>
+        </div>
+    </div>
+    """
+
+    interactive_box = f"""
+    <div class="interactive-box">
+        <h4>&#9881; Console d'évaluation en direct de la Sequence</h4>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Testez directement dans cette page les fonctions <code>itemf(n)</code> et <code>containf(x)</code> :
+        </p>
+        <div class="test-controls">
+            <div class="test-input-group">
+                <label for="itemf-n">Calculer terme <em>n</em> :</label>
+                <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
+                <button type="button" onclick="testItemf('{sid}')" class="test-button">Calculer itemf(n)</button>
+            </div>
+            <div class="test-input-group">
+                <label for="containf-x">Tester nombre <em>x</em> :</label>
+                <input type="number" id="containf-x" value="55" class="test-input">
+                <button type="button" onclick="testContainf('{sid}')" class="test-button">Tester containf(x)</button>
+            </div>
+        </div>
+        <div id="test-result" class="test-output">Résultat prêt. Cliquez sur un bouton ci-dessus.</div>
+    </div>
+    """
+
+    full_content = f"""
+    {actions_bar}
+    <div class="sequence-card markdown-body">
+        {html_body}
+        {interactive_box}
+    </div>
+    """
+
+    return render_page(f"{sid}", full_content, query=sid, seq_id=sid)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+
