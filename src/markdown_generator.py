@@ -6,9 +6,11 @@ Crée ou met à jour un fichier Markdown pour une séquence donnée à partir de
 import os
 import sqlite3
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'sequences')) else SRC_DIR
 DEFAULT_DB_PATH = os.path.join(BASE_DIR, 'oeis.db')
 DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, 'sequences')
+
 
 
 def get_sequence_data(seq_id, conn):

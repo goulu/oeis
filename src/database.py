@@ -134,9 +134,12 @@ class Database:
 
 
 logging.basicConfig(level=logging.DEBUG)
-path = os.path.dirname(os.path.abspath(__file__))
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+# Si oeis.db ou create.sql est à la racine (dossier parent de src)
+path = os.path.dirname(_this_dir) if os.path.exists(os.path.join(os.path.dirname(_this_dir), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(_this_dir), 'create.sql')) else _this_dir
 database = Database(path)
 logging.info("SQLite DB Version : " + database.version)
+
 
 if __name__ == "__main__":
     # database.populate()

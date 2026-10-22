@@ -12,15 +12,22 @@ from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+import sys
+
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
 from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR
 from search_engine import OEISSearchEngine
 
 app = FastAPI(title="OEIS Python Clone", version="1.0.0")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'oeis.db')
-SEQUENCES_DIR = os.path.join(BASE_DIR, 'sequences')
+ROOT_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'sequences')) else SRC_DIR
+DB_PATH = os.path.join(ROOT_DIR, 'oeis.db')
+SEQUENCES_DIR = os.path.join(ROOT_DIR, 'sequences')
 search_engine = OEISSearchEngine(DB_PATH)
+
 
 
 

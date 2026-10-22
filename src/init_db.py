@@ -13,9 +13,12 @@ import time
 
 from goulib import decorators, itertools2
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'oeis.db')
-SQL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'create.sql')
-OEIS_PY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'oeis.py')
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'create.sql')) else SRC_DIR
+DB_PATH = os.path.join(ROOT_DIR, 'oeis.db')
+SQL_PATH = os.path.join(ROOT_DIR, 'create.sql')
+OEIS_PY_PATH = os.path.join(SRC_DIR, 'oeis.py')
+
 
 
 def parse_oeis_ast(filepath):

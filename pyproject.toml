@@ -33,4 +33,10 @@ web = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.28.0",
     "pydantic>=2.6.0",
+    "markdown>=3.6",
+    "python-multipart>=0.0.9",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
