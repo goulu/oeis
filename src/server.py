@@ -177,10 +177,31 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             background-color: var(--primary-hover);
         }}
 
+        .search-hints-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }}
+
         .search-hints {{
             font-size: 0.78rem;
             color: var(--text-muted);
-            margin-top: 0.3rem;
+        }}
+
+        .search-hints-action a {{
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }}
+
+        .search-hints-action a:hover {{
+            text-decoration: underline;
         }}
 
         /* Main Content Container */
@@ -458,19 +479,19 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
                     <span>Modern Implementation for Coders and Agents</span>
                 </div>
             </a>
-            <div class="header-links">
-                <a href="/">Home</a>
-                <a href="/A000045">A000045 (Fibonacci)</a>
-                <a href="/hints.html">Search Hints</a>
-            </div>
         </div>
         <div class="search-container">
             <form action="/search" method="GET" class="search-form" toolname="oeis_search" tooldescription="Search integer sequences in the OEIS database by numbers, ID, author, or keyword">
                 <input type="text" name="q" value="{query}" placeholder="Search by terms (e.g. 1, 1, 2, 3, 5, 8), keyword, or sequence ID (e.g. A000045)..." class="search-input" toolparamdescription="Search query: numbers e.g. 1, 1, 2, 3, 5, 8 or ID e.g. A000045">
                 <button type="submit" class="search-btn">Search</button>
             </form>
-            <div class="search-hints">
-                Examples: <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
+            <div class="search-hints-row">
+                <div class="search-hints">
+                    Examples: <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
+                </div>
+                <div class="search-hints-action">
+                    <a href="/hints.html">Search Hints</a>
+                </div>
             </div>
         </div>
     </header>
