@@ -6,9 +6,10 @@ Serveur Web pour le clone OEIS.
 """
 
 import os
+import json
 import sqlite3
 import markdown
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request, Form, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -45,6 +46,8 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - The On-Line Encyclopedia of Integer Sequences</title>
+    <link rel="ai-catalog" href="/.well-known/ai-catalog.json">
+    <link rel="api-catalog" href="/.well-known/api-catalog">
     <!-- MathJax pour rendu des formules LaTeX -->
     <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -462,8 +465,8 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             </div>
         </div>
         <div class="search-container">
-            <form action="/search" method="GET" class="search-form">
-                <input type="text" name="q" value="{query}" placeholder="Search by terms (e.g. 1, 1, 2, 3, 5, 8), keyword, or sequence ID (e.g. A000045)..." class="search-input">
+            <form action="/search" method="GET" class="search-form" toolname="oeis_search" tooldescription="Search integer sequences in the OEIS database by numbers, ID, author, or keyword">
+                <input type="text" name="q" value="{query}" placeholder="Search by terms (e.g. 1, 1, 2, 3, 5, 8), keyword, or sequence ID (e.g. A000045)..." class="search-input" toolparamdescription="Search query: numbers e.g. 1, 1, 2, 3, 5, 8 or ID e.g. A000045">
                 <button type="submit" class="search-btn">Search</button>
             </form>
             <div class="search-hints">
@@ -514,6 +517,32 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             out.innerText = 'Network error: ' + e.message;
         }}
     }}
+
+    // WebMCP API tool registration for AI agents
+    (function() {{
+        try {{
+            var mc = (typeof document !== 'undefined' && document.modelContext) || 
+                     (typeof navigator !== 'undefined' && navigator.modelContext);
+            if (mc && typeof mc.registerTool === 'function') {{
+                mc.registerTool({{
+                    name: "oeis_search",
+                    description: "Search the On-Line Encyclopedia of Integer Sequences (OEIS) by numbers, keywords, or sequence ID",
+                    inputSchema: {{
+                        type: "object",
+                        properties: {{
+                            query: {{ type: "string", description: "Search query e.g. 1, 1, 2, 3, 5, 8 or A000045" }}
+                        }},
+                        required: ["query"]
+                    }},
+                    execute: async function(params) {{
+                        var q = params && params.query ? encodeURIComponent(params.query) : '';
+                        var res = await fetch('/api/search?q=' + q);
+                        return await res.json();
+                    }}
+                }}).catch(function() {{}});
+            }}
+        }} catch (e) {{}}
+    }})();
     </script>
 </body>
 </html>
@@ -521,8 +550,30 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
 
 
 @app.get("/", response_class=HTMLResponse)
-def index_page():
-    """Page d'accueil avec moteur de recherche et aperçu des suites remarquables."""
+def index_page(request: Request = None):
+    """Page d'accueil avec moteur de recherche, Link headers (RFC 8288) et support Markdown."""
+    if request:
+        accept = request.headers.get("accept", "").lower()
+        if "text/markdown" in accept:
+            md_text = (
+                "# The On-Line Encyclopedia of Integer Sequences (OEIS)\n\n"
+                "Collaborative platform for infinite integer sequences integrating the `Sequence` class with `iterf`, `itemf` and `containf` methods.\n\n"
+                "## Key Resources\n"
+                "- Direct sequence lookup: `/{Axxxxxx}` (e.g. `/A000045`)\n"
+                "- Search sequences: `/search?q={query}` (e.g. `/search?q=1,1,2,3,5,8`)\n"
+                "- Search hints: `/hints.html`\n"
+                "- API Catalog: `/.well-known/api-catalog`\n"
+                "- AI Capabilities Manifest: `/.well-known/ai-catalog.json`\n"
+                "- OpenAPI Specification: `/openapi.json`\n"
+                "- API Documentation: `/docs`\n"
+            )
+            tokens = str(len(md_text.split()) * 4 // 3)
+            return Response(
+                content=md_text,
+                media_type="text/markdown; charset=utf-8",
+                headers={"x-markdown-tokens": tokens}
+            )
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT count(*) FROM sequences")
@@ -562,12 +613,38 @@ def index_page():
         {samples_html}
     </div>
     """
-    return render_page("Home", home_content)
+    headers = {
+        "Link": '</.well-known/api-catalog>; rel="api-catalog", </docs>; rel="service-doc", </openapi.json>; rel="service-desc"'
+    }
+    return HTMLResponse(content=render_page("Home", home_content), headers=headers)
 
 
 @app.get("/hints.html", response_class=HTMLResponse)
-def hints_page():
+def hints_page(request: Request = None):
     """Page d'aide à la recherche conforme à hints.html."""
+    if request:
+        accept = request.headers.get("accept", "").lower()
+        if "text/markdown" in accept:
+            md_text = (
+                "# Search Hints and Syntax\n\n"
+                "## 1. Number sequence search\n"
+                "- Consecutive terms: `1, 1, 2, 3, 5, 8, 13`\n"
+                "- Single term wildcard (`_`): `1, 2, _, 4, 5`\n"
+                "- Subsequence wildcard (`__`): `1, 2, __, 8, 13`\n\n"
+                "## 2. Field prefixes\n"
+                "- `id:A000045`: direct sequence lookup\n"
+                "- `author:Philippe`: search by author name\n"
+                "- `keyword:core`: search by OEIS keyword\n\n"
+                "## 3. Full-text search\n"
+                "- Simple words are searched in descriptions and metadata (e.g. `Fibonacci`, `prime`).\n"
+            )
+            tokens = str(len(md_text.split()) * 4 // 3)
+            return Response(
+                content=md_text,
+                media_type="text/markdown; charset=utf-8",
+                headers={"x-markdown-tokens": tokens}
+            )
+
     hints_content = """
     <div class="sequence-card">
         <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Search Hints and Syntax</h2>
@@ -649,6 +726,137 @@ def search_page(q: str = ""):
             """
     res_html += '</div>'
     return render_page(f"Search: {query}", res_html, query=query)
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    """Génère le sitemap XML canonique pour le site selon le protocole sitemaps.org."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM sequences ORDER BY id")
+    seq_rows = cursor.fetchall()
+    conn.close()
+
+    base_url = "https://oeis.drgoulu.com"
+    xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f'  <url><loc>{base_url}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>',
+        f'  <url><loc>{base_url}/hints.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>',
+    ]
+    for row in seq_rows:
+        sid = row[0]
+        xml_lines.append(f'  <url><loc>{base_url}/{sid}</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>')
+    xml_lines.append('</urlset>')
+    return Response(content="\n".join(xml_lines), media_type="application/xml; charset=utf-8")
+
+
+@app.get("/.well-known/api-catalog")
+def api_catalog():
+    """Publie le catalogue d'API selon la RFC 9727."""
+    catalog = {
+        "linkset": [
+            {
+                "anchor": "https://oeis.drgoulu.com/",
+                "service-desc": [
+                    { "href": "https://oeis.drgoulu.com/openapi.json", "type": "application/json" }
+                ],
+                "service-doc": [
+                    { "href": "https://oeis.drgoulu.com/docs", "type": "text/html" }
+                ],
+                "status": [
+                    { "href": "https://oeis.drgoulu.com/api/search?q=1,2,3", "type": "application/json" }
+                ]
+            }
+        ]
+    }
+    return Response(
+        content=json.dumps(catalog, indent=2),
+        media_type="application/linkset+json; charset=utf-8"
+    )
+
+
+@app.get("/.well-known/mcp/server-card.json")
+def mcp_server_card():
+    """Publie l'MCP Server Card (SEP-1649) pour la découverte par agents."""
+    card = {
+        "serverInfo": {
+            "name": "oeis-mcp",
+            "version": "1.0.0",
+            "description": "On-Line Encyclopedia of Integer Sequences (OEIS) Agent MCP Server"
+        },
+        "endpoint": "https://oeis.drgoulu.com/mcp",
+        "capabilities": {
+            "tools": { "listChanged": False },
+            "resources": { "subscribe": False, "listChanged": False },
+            "prompts": { "listChanged": False }
+        }
+    }
+    return Response(
+        content=json.dumps(card, indent=2),
+        media_type="application/json; charset=utf-8"
+    )
+
+
+@app.get("/.well-known/agent-skills/index.json")
+def agent_skills_index():
+    """Publie l'index de découverte des compétences d'agents (Agent Skills Discovery RFC)."""
+    index = {
+        "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+        "skills": [
+            {
+                "name": "oeis-lookup",
+                "type": "skill-md",
+                "description": "Look up integer sequences by A-number or sequence terms in the OEIS database.",
+                "url": "https://oeis.drgoulu.com/hints.html",
+                "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+        ]
+    }
+    return Response(
+        content=json.dumps(index, indent=2),
+        media_type="application/json; charset=utf-8"
+    )
+
+
+@app.get("/.well-known/ai-catalog.json")
+def ai_catalog():
+    """Publie le manifeste de découverte de ressources d'agents (ARD / ai-catalog)."""
+    manifest = {
+        "specVersion": "1.0",
+        "host": {
+            "displayName": "OEIS Python Clone",
+            "identifier": "did:web:oeis.drgoulu.com"
+        },
+        "entries": [
+            {
+                "identifier": "urn:air:oeis.drgoulu.com:service:search",
+                "displayName": "OEIS Sequence Search & Lookup",
+                "type": "application/json",
+                "url": "https://oeis.drgoulu.com/api/search",
+                "representativeQueries": [
+                    "lookup Fibonacci numbers A000045",
+                    "search integer sequence 1, 1, 2, 3, 5, 8",
+                    "find prime number sequence A000040"
+                ]
+            },
+            {
+                "identifier": "urn:air:oeis.drgoulu.com:server:mcp",
+                "displayName": "OEIS MCP Server Card",
+                "type": "application/mcp-server-card+json",
+                "url": "https://oeis.drgoulu.com/.well-known/mcp/server-card.json",
+                "representativeQueries": [
+                    "query integer sequences via MCP",
+                    "access OEIS tools"
+                ]
+            }
+        ]
+    }
+    return Response(
+        content=json.dumps(manifest, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
@@ -791,8 +999,8 @@ def api_create_and_serve(seq_id: str):
         conn.close()
 
 
-@app.get("/{seq_id}", response_class=HTMLResponse)
-def sequence_page(seq_id: str, direct: bool = False):
+@app.get("/{seq_id}")
+def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
     """
     Page d'affichage d'une séquence :
     1. Si le fichier Markdown existe, le lit et le convertit en HTML à la volée.
@@ -807,12 +1015,14 @@ def sequence_page(seq_id: str, direct: bool = False):
     else:
         raise HTTPException(status_code=404, detail="Invalid OEIS identifier format (expected: Axxxxxx)")
 
+    wants_markdown = request and "text/markdown" in request.headers.get("accept", "").lower()
+
     md_file_path = os.path.join(SEQUENCES_DIR, f"{sid}.md")
 
     # Si le fichier Markdown n'existe pas encore
     if not os.path.exists(md_file_path):
-        if direct:
-            # Mode direct sans écran d'attente (pour tests ou fallback sans JS)
+        if direct or wants_markdown:
+            # Mode direct sans écran d'attente (pour tests, agents ou fallback sans JS)
             conn = get_db()
             try:
                 generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
@@ -878,6 +1088,17 @@ def sequence_page(seq_id: str, direct: bool = False):
     # Lecture du fichier Markdown
     with open(md_file_path, "r", encoding="utf-8") as f:
         md_text = f.read()
+
+    if wants_markdown:
+        tokens = len(md_text.split()) * 4 // 3
+        return Response(
+            content=md_text,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Type": "text/markdown; charset=utf-8",
+                "x-markdown-tokens": str(tokens),
+            }
+        )
 
     # Conversion à la volée du Markdown en HTML
     html_body = markdown.markdown(

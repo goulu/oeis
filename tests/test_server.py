@@ -6,9 +6,22 @@ Tests pour les routes de src/server.py :
 """
 
 import os
+import json
 import unittest
+from starlette.requests import Request
 
-from src.server import sequence_page, api_create_and_serve, robots_txt, SEQUENCES_DIR
+from src.server import (
+    sequence_page,
+    api_create_and_serve,
+    robots_txt,
+    sitemap_xml,
+    api_catalog,
+    mcp_server_card,
+    agent_skills_index,
+    ai_catalog,
+    index_page,
+    SEQUENCES_DIR,
+)
 
 
 class TestServerSequenceFlow(unittest.TestCase):
@@ -20,6 +33,70 @@ class TestServerSequenceFlow(unittest.TestCase):
         self.assertIn("Allow: /", content)
         self.assertIn("Disallow: /api/", content)
         self.assertIn("Disallow: /search", content)
+        self.assertIn("Content-Signal: ai-train=no, search=yes, ai-input=yes", content)
+        self.assertIn("Sitemap: https://oeis.drgoulu.com/sitemap.xml", content)
+        self.assertIn("User-agent: OAI-SearchBot", content)
+        self.assertIn("User-agent: GPTBot", content)
+
+    def test_sitemap_xml(self):
+        res = sitemap_xml()
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("application/xml", res.media_type)
+        content = res.body.decode('utf-8')
+        self.assertIn('<?xml version="1.0" encoding="UTF-8"?>', content)
+        self.assertIn('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">', content)
+        self.assertIn('<loc>https://oeis.drgoulu.com/</loc>', content)
+
+    def test_api_catalog(self):
+        res = api_catalog()
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("application/linkset+json", res.media_type)
+        data = json.loads(res.body.decode('utf-8'))
+        self.assertIn("linkset", data)
+        self.assertEqual(data["linkset"][0]["anchor"], "https://oeis.drgoulu.com/")
+
+    def test_mcp_server_card(self):
+        res = mcp_server_card()
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.body.decode('utf-8'))
+        self.assertIn("serverInfo", data)
+        self.assertEqual(data["serverInfo"]["name"], "oeis-mcp")
+
+    def test_agent_skills_index(self):
+        res = agent_skills_index()
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.body.decode('utf-8'))
+        self.assertIn("skills", data)
+        self.assertTrue(len(data["skills"]) > 0)
+
+    def test_ai_catalog(self):
+        res = ai_catalog()
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers.get("Access-Control-Allow-Origin"), "*")
+        data = json.loads(res.body.decode('utf-8'))
+        self.assertEqual(data.get("specVersion"), "1.0")
+        self.assertIn("entries", data)
+
+    def test_link_headers_and_markdown_negotiation(self):
+        # 1. HTML request on homepage has Link headers
+        scope_html = {'type': 'http', 'headers': [(b'accept', b'text/html')]}
+        res_html = index_page(Request(scope_html))
+        self.assertEqual(res_html.status_code, 200)
+        self.assertIn('rel="api-catalog"', res_html.headers.get("link", ""))
+        self.assertIn('rel="service-doc"', res_html.headers.get("link", ""))
+
+        # 2. Markdown negotiation on homepage
+        scope_md = {'type': 'http', 'headers': [(b'accept', b'text/markdown')]}
+        res_md = index_page(Request(scope_md))
+        self.assertEqual(res_md.status_code, 200)
+        self.assertIn("text/markdown", res_md.headers.get("content-type", ""))
+        self.assertIn("x-markdown-tokens", res_md.headers)
+
+        # 3. Markdown negotiation on sequence page
+        res_seq_md = sequence_page("A000045", Request(scope_md))
+        self.assertEqual(res_seq_md.status_code, 200)
+        self.assertIn("text/markdown", res_seq_md.headers.get("content-type", ""))
+        self.assertIn("x-markdown-tokens", res_seq_md.headers)
 
     def test_on_demand_sequence_generation(self):
         sid = "A022307"
@@ -57,3 +134,4 @@ class TestServerSequenceFlow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

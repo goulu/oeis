@@ -7,3 +7,39 @@ Allow: /hints.html
 Disallow: /api/
 Disallow: /search
 Disallow: /raw/
+Content-Signal: ai-train=no, search=yes, ai-input=yes
+
+# Search crawlers
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+# Training crawlers
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+Disallow: /search
+
+Sitemap: https://oeis.drgoulu.com/sitemap.xml
+Agentmap: https://oeis.drgoulu.com/.well-known/ai-catalog.json
