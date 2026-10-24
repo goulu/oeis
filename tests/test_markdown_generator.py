@@ -96,6 +96,20 @@ class TestMarkdownGenerator(unittest.TestCase):
         text2 = "- [Table](https://oeis.org/A000045/b000045.txt) and [PDF](https://oeis.org/A000003/a000003.pdf)"
         self.assertEqual(localize_sequence_links(text2), text2)
 
+        # Noms de séquences bare (Axxxxxx) convertis en liens locaux
+        text3 = "Row sums of A030528, A006356-A006359, A000032(n)^2 and cf. A014599."
+        self.assertEqual(
+            localize_sequence_links(text3),
+            "Row sums of [A030528](A030528), [A006356](A006356)-[A006359](A006359), [A000032](A000032)(n)^2 and cf. [A014599](A014599)."
+        )
+
+        # Les blocs de code et code inline sont préservés
+        text4 = "```python\nA000045 = 1\n```\n`A000045` and A000045"
+        self.assertEqual(
+            localize_sequence_links(text4),
+            "```python\nA000045 = 1\n```\n`A000045` and [A000045](A000045)"
+        )
+
     def test_format_sequence_markdown(self):
         data = parse_oeis_seq(SAMPLE_SEQ_CONTENT, "A000003")
         md = format_sequence_markdown(data)

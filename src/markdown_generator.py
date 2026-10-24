@@ -33,36 +33,70 @@ def normalize_seq_id(seq_id: str) -> str:
 
 def localize_sequence_links(text: str) -> str:
     """
-    Remplace tous les liens vers d'autres séquences par des liens locaux :
-    par exemple [A001622](https://oeis.org/A001622) ou (https://oeis.org/A001622) -> A001622.
+    Remplace tous les noms de séquences Axxxxxx et liens vers des séquences par des liens locaux :
+    par exemple A001622 -> [A001622](A001622), [A001622](https://oeis.org/A001622) -> [A001622](A001622).
     Les liens vers des sous-pages ou documents comme https://oeis.org/A000045/b000045.txt
-    restent inchangés.
+    restent inchangés. Les blocs de code et le titre principal H1 sont préservés.
     """
-    # 1. Liens Markdown vers une séquence seule : [texte](https://oeis.org/Axxxxxx) ou [texte](/Axxxxxx) -> [texte](Axxxxxx)
-    text = re.sub(
-        r'\[([^\]]*)\]\((?:https?://(?:www\.)?oeis\.org)?/+(A\d{6})/?\)',
-        r'[\1](\2)',
-        text,
-        flags=re.IGNORECASE
+    token_pattern = re.compile(
+        r"(```[^\n]*\n.*?```)|"             # 1. Blocs de code (fenced code blocks)
+        r"(`[^`\n]+`)|"                     # 2. Code inline
+        r"(^#\s+A\d{6}\b)|"                 # 3. Titre principal H1
+        r"(\[[^\]]*\]\([^)]*\))|"           # 4. Liens Markdown existants
+        r"(https?://[^\s)\]>]+)|"           # 5. URLs autonomes
+        r"(<a\s+[^>]*>.*?</a>)|"            # 6. Balises anchor HTML
+        r"(<[^>]+>)|"                       # 7. Autres balises HTML / autolinks
+        r"(\bA\d{6}\b)",                    # 8. Noms de séquences OEIS Axxxxxx
+        re.DOTALL | re.IGNORECASE | re.MULTILINE
     )
 
-    # 2. Balises HTML résiduelles vers une séquence seule
-    def _replace_html_a(m):
-        href = m.group(1).strip()
-        label = m.group(2).strip()
-        sm = re.match(r'^(?:https?://(?:www\.)?oeis\.org)?/+(A\d{6})/?$', href, flags=re.IGNORECASE)
-        if sm:
-            return f"[{label}]({sm.group(1).upper()})"
+    def repl(m):
+        code_block, inline_code, h1_title, md_link, url, a_tag, other_tag, seq_name = m.groups()
+        if code_block:
+            return code_block
+        elif inline_code:
+            return inline_code
+        elif h1_title:
+            return h1_title
+        elif md_link:
+            # Si le lien pointe directement vers une séquence seule (ex: /A001622 ou https://oeis.org/A001622)
+            sm = re.match(r"^\[([^\]]*)\]\((?:https?://(?:www\.)?oeis\.org)?/+(A\d{6})/?\)$", md_link, re.I)
+            if sm:
+                label = sm.group(1)
+                sid = sm.group(2).upper()
+                return f"[{label}]({sid})"
+            return md_link
+        elif url:
+            # Si l'URL pointe directement vers une séquence seule (ex: https://oeis.org/A001622)
+            sm = re.match(r"^https?://(?:www\.)?oeis\.org/+(A\d{6})/?$", url, re.I)
+            if sm:
+                sid = sm.group(1).upper()
+                return f"[{sid}]({sid})"
+            return url
+        elif a_tag:
+            sm = re.match(r"^<a\s+href=[\"']?(?:https?://(?:www\.)?oeis\.org)?/+(A\d{6})/?[\"']?\s*>(.*?)</a>$", a_tag, re.I | re.DOTALL)
+            if sm:
+                sid = sm.group(1).upper()
+                label = sm.group(2).strip()
+                return f"[{label}]({sid})"
+            sm_other = re.match(r"^<a\s+href=[\"']?([^\"' >]+)[\"']?\s*>(.*?)</a>$", a_tag, re.I | re.DOTALL)
+            if sm_other:
+                href = sm_other.group(1).strip()
+                label = sm_other.group(2).strip()
+                if href.startswith("/"):
+                    href = f"https://oeis.org{href}"
+                elif not (href.startswith("http://") or href.startswith("https://") or href.startswith("mailto:")):
+                    href = f"https://oeis.org/{href}"
+                return f"[{label}]({href})"
+            return a_tag
+        elif other_tag:
+            return other_tag
+        elif seq_name:
+            sid = seq_name.upper()
+            return f"[{sid}]({sid})"
         return m.group(0)
 
-    text = re.sub(
-        r'<a\s+href=[\"\']?([^\"\' >]+)[\"\']?\s*>(.*?)</a>',
-        _replace_html_a,
-        text,
-        flags=re.IGNORECASE
-    )
-
-    return text
+    return token_pattern.sub(repl, text)
 
 
 def format_oeis_link(line: str) -> str:
@@ -95,7 +129,7 @@ def format_oeis_link(line: str) -> str:
 
 def format_crossref(line: str) -> str:
     """Transforme les identifiants OEIS (Axxxxxx) en liens Markdown locaux [Axxxxxx](Axxxxxx)."""
-    return re.sub(r'(?<!\[)\b(A\d{6})\b(?!\]|\()', r'[\1](\1)', line)
+    return localize_sequence_links(line)
 
 
 def parse_oeis_seq(content: str, sid: str = "") -> dict:
@@ -505,7 +539,7 @@ def format_sequence_markdown(data):
     if crossrefs:
         for y in crossrefs:
             md.append(f"- {format_crossref(y.strip())}")
-    md.append(f"- See also the official entry at https://oeis.org/{sid}\n")
+    md.append(f"- See also the official entry at <https://oeis.org/{sid}>\n")
 
     # Section Extensions et Erreurs (%E)
     extensions = data.get('extensions', [])

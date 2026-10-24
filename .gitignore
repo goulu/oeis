@@ -170,3 +170,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 oeis.db
+seq/*.md
