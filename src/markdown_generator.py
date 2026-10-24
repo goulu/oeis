@@ -168,7 +168,11 @@ def parse_oeis_seq(content: str, sid: str = "") -> dict:
         parts = line[1:].split(' ', 2)
         if len(parts) < 3:
             continue
-        tag, line_sid, val = parts[0], parts[1], parts[2].strip()
+        tag, line_sid = parts[0], parts[1]
+        if tag in ('p', 't', 'o'):
+            val = parts[2].rstrip()
+        else:
+            val = parts[2].strip()
         if not sid:
             sid = line_sid
         fields.setdefault(tag, []).append(val)
@@ -468,6 +472,52 @@ def get_sequence_data(seq_id, conn=None):
         return db_data
 
 
+def normalize_code_lang(lang: str) -> str:
+    """Normalise l'identifiant de langage pour le bloc de code Markdown."""
+    lang_clean = lang.strip().lower()
+    mapping = {
+        'c++': 'cpp',
+        'c#': 'csharp',
+        'f#': 'fsharp',
+        'pari/gp': 'pari',
+        'gp': 'pari',
+        'sagemath': 'sagemath',
+        'sage': 'sagemath',
+        'mathematica': 'mathematica',
+        'maple': 'maple',
+        'maxima': 'maxima',
+        'magma': 'magma',
+        'axiom': 'axiom',
+        'python': 'python',
+        'haskell': 'haskell',
+        'julia': 'julia',
+    }
+    return mapping.get(lang_clean, lang_clean)
+
+
+def split_by_alternative(lines: list) -> list:
+    """
+    Découpe une liste de lignes de code en plusieurs sous-blocs
+    dès qu'une ligne commence par un indicateur d'alternative (# Alternative:, (* Alternative: *), etc.)
+    afin de produire des blocs de code séparés avec le même langage.
+    """
+    blocks = []
+    current_block = []
+    alt_regex = re.compile(r'^\s*(?:#|//|\\\\|--|\(\*)\s*Alternative\b', re.IGNORECASE)
+
+    for line in lines:
+        if alt_regex.match(line) and current_block:
+            blocks.append(current_block)
+            current_block = [line]
+        else:
+            current_block.append(line)
+
+    if current_block:
+        blocks.append(current_block)
+
+    return blocks
+
+
 def format_sequence_markdown(data):
     """
     Formate les données d'une séquence en un document Markdown structuré inspiré d'OEIS
@@ -573,29 +623,58 @@ def format_sequence_markdown(data):
         md.append("### PROGRAMS")
         if maple_progs:
             md.append("#### Maple")
-            md.append("```maple")
-            md.append('\n'.join(maple_progs))
-            md.append("```\n")
+            maple_blocks = split_by_alternative(maple_progs)
+            for block in maple_blocks:
+                code_text = '\n'.join(block).strip('\r\n')
+                if code_text.strip():
+                    md.append("```maple")
+                    md.append(code_text)
+                    md.append("```")
+            md.append("")
         if math_progs:
             md.append("#### Mathematica")
-            md.append("```mathematica")
-            md.append('\n'.join(math_progs))
-            md.append("```\n")
+            math_blocks = split_by_alternative(math_progs)
+            for block in math_blocks:
+                code_text = '\n'.join(block).strip('\r\n')
+                if code_text.strip():
+                    md.append("```mathematica")
+                    md.append(code_text)
+                    md.append("```")
+            md.append("")
         if other_progs:
             md.append("#### Other Programs")
-            for prog in other_progs:
-                prog_clean = prog.strip()
-                match_lang = re.match(r'^\(([^)]+)\)\s*(.*)', prog_clean, re.DOTALL)
+            programs_list = []
+            current_lang = None
+            current_lines = []
+            lang_header_regex = re.compile(r'^\(([A-Z][a-zA-Z0-9#+/\.]{0,20}(?: [A-Za-z0-9#+/\.]{1,15})?)\)(?![a-zA-Z0-9_\.\[])\s*(.*)', re.DOTALL)
+
+            for raw_line in other_progs:
+                clean_stripped = raw_line.strip()
+                match_lang = lang_header_regex.match(clean_stripped)
                 if match_lang:
-                    lang, code = match_lang.group(1), match_lang.group(2)
-                    md.append(f"- **({lang})** :")
-                    md.append(f"```{lang.lower()}")
-                    md.append(code)
-                    md.append("```")
+                    if current_lang is not None or current_lines:
+                        programs_list.append((current_lang or "text", current_lines))
+                    current_lang = match_lang.group(1).strip()
+                    code_rest = match_lang.group(2)
+                    current_lines = [code_rest] if code_rest.strip() else []
                 else:
-                    md.append("```text")
-                    md.append(prog_clean)
-                    md.append("```")
+                    if current_lang is None:
+                        current_lang = "text"
+                    current_lines.append(raw_line)
+
+            if current_lang is not None or current_lines:
+                programs_list.append((current_lang or "text", current_lines))
+
+            for lang, lines in programs_list:
+                md.append(f"- **({lang})** :")
+                fence_lang = normalize_code_lang(lang)
+                sub_blocks = split_by_alternative(lines)
+                for block in sub_blocks:
+                    code_text = '\n'.join(block).strip('\r\n')
+                    if code_text.strip():
+                        md.append(f"```{fence_lang}")
+                        md.append(code_text)
+                        md.append("```")
             md.append("")
 
     # Section Implémentation Python Goulib / Sequence

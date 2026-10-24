@@ -140,6 +140,50 @@ class TestMarkdownGenerator(unittest.TestCase):
         self.assertNotIn("\n", data_block)
         self.assertTrue(data_block.startswith("1, 1, 1, 1, 2, 2"))
 
+    def test_programs_formatting(self):
+        seq_sample = """%I A000045
+%S A000045 0, 1, 1, 2, 3
+%N A000045 Fibonacci
+%p A000045 A000045 := proc(n) combinat[fibonacci](n); end;
+%p A000045 # Alternative:
+%p A000045 ZL := proc(n) ... end;
+%t A000045 Table[Fibonacci[k], {k, 0, 50}]
+%t A000045 (* Alternative: *)
+%t A000045 LinearRecurrence[{1, 1}, {0, 1}, 40]
+%o A000045 (Python)
+%o A000045 A000045 = lambda n: ...
+%o A000045 (SageMath) # Demonstration program from _Jaap Spies_:
+%o A000045 a = sloane.A000045; # choose sequence
+%o A000045 print(a)            # This returns the name of the sequence.
+%o A000045 print(a(38))        # This returns the 38th term of the sequence.
+%o A000045 print(a.list(39))   # This returns a list of the first 39 terms.
+"""
+        data = parse_oeis_seq(seq_sample, "A000045")
+        md = format_sequence_markdown(data)
+
+        # 1. Vérification que les alternatives Maple et Mathematica créent des blocs séparés
+        self.assertIn("```maple\nA000045 := proc(n) combinat[fibonacci](n); end;\n```", md)
+        self.assertIn("```maple\n# Alternative:\nZL := proc(n) ... end;\n```", md)
+        self.assertIn("```mathematica\nTable[Fibonacci[k], {k, 0, 50}]\n```", md)
+        self.assertIn("```mathematica\n(* Alternative: *)\nLinearRecurrence[{1, 1}, {0, 1}, 40]\n```", md)
+
+        # 2. Vérification que (Python) seul n'émet pas un bloc vide mais intègre la ligne suivante
+        self.assertIn("- **(Python)** :\n```python\nA000045 = lambda n: ...\n```", md)
+        self.assertNotIn("```python\n\n```", md)
+
+        # 3. Vérification du groupement des lignes du programme SageMath dans un seul bloc
+        expected_sage = (
+            "- **(SageMath)** :\n"
+            "```sagemath\n"
+            "# Demonstration program from _Jaap Spies_:\n"
+            "a = sloane.A000045; # choose sequence\n"
+            "print(a)            # This returns the name of the sequence.\n"
+            "print(a(38))        # This returns the 38th term of the sequence.\n"
+            "print(a.list(39))   # This returns a list of the first 39 terms.\n"
+            "```"
+        )
+        self.assertIn(expected_sage, md)
+
     def test_generate_sequence_markdown(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             file_path, content = generate_sequence_markdown("A000003", output_dir=tmp_dir)
