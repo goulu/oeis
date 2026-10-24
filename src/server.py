@@ -369,6 +369,63 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             color: #0f172a;
         }}
 
+        /* Écran d'attente "Please wait" pour séquences en cours de génération */
+        .please-wait-card {{
+            max-width: 550px;
+            margin: 4rem auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        }}
+
+        .spinner {{
+            width: 52px;
+            height: 52px;
+            border: 5px solid #e2e8f0;
+            border-top: 5px solid var(--primary);
+            border-radius: 50%;
+            margin: 0 auto 1.5rem auto;
+            animation: spin 1s linear infinite;
+        }}
+
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+
+        .please-wait-title {{
+            font-size: 1.6rem;
+            color: var(--oeis-blue);
+            margin-bottom: 0.6rem;
+        }}
+
+        .please-wait-subtitle {{
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 1.5rem;
+        }}
+
+        .please-wait-badge {{
+            display: inline-block;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-weight: 700;
+            padding: 0.5rem 1.4rem;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
+            animation: pulse 1.6s ease-in-out infinite;
+        }}
+
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.8; transform: scale(1.03); }}
+        }}
+
         footer {{
             text-align: center;
             padding: 2rem;
@@ -681,13 +738,38 @@ def api_update_sequence(
     }
 
 
+@app.post("/api/create_and_serve/{seq_id}")
+def api_create_and_serve(seq_id: str):
+    """
+    Génère le fichier Markdown pour une séquence inexistante en extrayant les données depuis OEIS,
+    puis synchronise la base de données SQLite locale.
+    """
+    sid = seq_id.strip().upper()
+    if sid.startswith('A') and sid[1:].isdigit():
+        num = sid[1:]
+        sid = f"A{num.zfill(6)}"
+    else:
+        raise HTTPException(status_code=400, detail="Format d'identifiant OEIS invalide (attendu: Axxxxxx)")
+
+    conn = get_db()
+    try:
+        file_path, _ = generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
+        return {"status": "success", "sequence_id": sid, "markdown_file": file_path}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable sur l'OEIS.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération de {sid} : {str(e)}")
+    finally:
+        conn.close()
+
+
 @app.get("/{seq_id}", response_class=HTMLResponse)
-def sequence_page(seq_id: str):
+def sequence_page(seq_id: str, direct: bool = False):
     """
     Page d'affichage d'une séquence :
-    1. Vérifie si le fichier Markdown existe. S'il n'existe pas, le génère à partir de la BD.
-    2. Convertit le Markdown en HTML à la volée.
-    3. Présente la page avec le style OEIS et le widget interactif de test.
+    1. Si le fichier Markdown existe, le lit et le convertit en HTML à la volée.
+    2. S'il n'existe pas, affiche immédiatement 'Please wait...' pendant l'extraction
+       et la génération du fichier .md, puis recharge et sert la page HTML.
     """
     # Nettoyage de l'ID (ex: A45 -> A000045)
     sid = seq_id.strip().upper()
@@ -699,15 +781,71 @@ def sequence_page(seq_id: str):
 
     md_file_path = os.path.join(SEQUENCES_DIR, f"{sid}.md")
 
-    # Si le fichier Markdown n'existe pas encore, on le génère depuis SQLite
+    # Si le fichier Markdown n'existe pas encore
     if not os.path.exists(md_file_path):
-        conn = get_db()
-        try:
-            generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
-        except ValueError:
-            raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable dans la base.")
-        finally:
-            conn.close()
+        if direct:
+            # Mode direct sans écran d'attente (pour tests ou fallback sans JS)
+            conn = get_db()
+            try:
+                generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
+            except ValueError:
+                raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable sur l'OEIS.")
+            finally:
+                conn.close()
+        else:
+            # Affichage de l'écran "Please wait" pendant le processus de création
+            loading_html = f"""
+            <noscript>
+                <meta http-equiv="refresh" content="0;url=/{sid}?direct=true">
+            </noscript>
+            <div class="please-wait-card">
+                <div class="spinner"></div>
+                <h2 class="please-wait-title">Séquence {sid}</h2>
+                <p class="please-wait-subtitle">
+                    Cette fiche n'existe pas encore localement.<br>
+                    Extraction des informations officielles depuis l'OEIS en cours...
+                </p>
+                <div class="please-wait-badge" id="wait-badge">⏳ Please wait...</div>
+                <div id="error-container" style="display: none; margin-top: 1.5rem;"></div>
+            </div>
+            <script>
+            (async function() {{
+                try {{
+                    const response = await fetch('/api/create_and_serve/{sid}', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }}
+                    }});
+                    if (response.ok) {{
+                        window.location.replace('/{sid}');
+                    }} else {{
+                        const err = await response.json().catch(() => ({{}}));
+                        const badge = document.getElementById('wait-badge');
+                        if (badge) badge.style.display = 'none';
+                        const spinner = document.querySelector('.spinner');
+                        if (spinner) spinner.style.display = 'none';
+                        const errDiv = document.getElementById('error-container');
+                        if (errDiv) {{
+                            errDiv.style.display = 'block';
+                            errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600; margin-bottom: 1rem;">❌ ' + 
+                                (err.detail || "Impossible de récupérer la séquence sur l\\'OEIS.") + 
+                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">Retour à l\\'accueil</a>';
+                        }}
+                    }}
+                }} catch (e) {{
+                    const badge = document.getElementById('wait-badge');
+                    if (badge) badge.style.display = 'none';
+                    const spinner = document.querySelector('.spinner');
+                    if (spinner) spinner.style.display = 'none';
+                    const errDiv = document.getElementById('error-container');
+                    if (errDiv) {{
+                        errDiv.style.display = 'block';
+                        errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600;">❌ Erreur réseau lors de la génération.</div>';
+                    }}
+                }}
+            }})();
+            </script>
+            """
+            return render_page(f"Séquence {sid} - Please wait", loading_html, seq_id=sid)
 
     # Lecture du fichier Markdown
     with open(md_file_path, "r", encoding="utf-8") as f:
