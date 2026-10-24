@@ -651,6 +651,25 @@ def search_page(q: str = ""):
     return render_page(f"Search: {query}", res_html, query=query)
 
 
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt():
+    """Publie /robots.txt conforme à la RFC 9309 (Robots Exclusion Protocol)."""
+    robots_file = os.path.join(ROOT_DIR, "robots.txt")
+    if os.path.exists(robots_file):
+        with open(robots_file, "r", encoding="utf-8") as f:
+            return f.read()
+    return (
+        "# robots.txt for https://oeis.drgoulu.com\n"
+        "# Conforms to RFC 9309\n\n"
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /hints.html\n"
+        "Disallow: /api/\n"
+        "Disallow: /search\n"
+        "Disallow: /raw/\n"
+    )
+
+
 @app.get("/raw/{seq_id}.md", response_class=PlainTextResponse)
 def raw_markdown(seq_id: str):
     """Retourne le contenu Markdown brut du fichier sur le disque."""

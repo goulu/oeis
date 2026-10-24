@@ -8,10 +8,18 @@ Tests pour les routes de src/server.py :
 import os
 import unittest
 
-from src.server import sequence_page, api_create_and_serve, SEQUENCES_DIR
+from src.server import sequence_page, api_create_and_serve, robots_txt, SEQUENCES_DIR
 
 
 class TestServerSequenceFlow(unittest.TestCase):
+
+    def test_robots_txt(self):
+        res = robots_txt()
+        content = res if isinstance(res, str) else res.body.decode('utf-8')
+        self.assertIn("User-agent:", content)
+        self.assertIn("Allow: /", content)
+        self.assertIn("Disallow: /api/", content)
+        self.assertIn("Disallow: /search", content)
 
     def test_on_demand_sequence_generation(self):
         sid = "A022307"

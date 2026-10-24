@@ -1,0 +1,9 @@
+# robots.txt for https://oeis.drgoulu.com
+# Conforms to RFC 9309 (Robots Exclusion Protocol)
+
+User-agent: *
+Allow: /
+Allow: /hints.html
+Disallow: /api/
+Disallow: /search
+Disallow: /raw/
