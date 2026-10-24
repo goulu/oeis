@@ -1063,7 +1063,7 @@ def api_create_and_serve(seq_id: str):
         conn.close()
 
 
-@app.get("/{seq_id}")
+@app.get("/{seq_id}", response_class=HTMLResponse)
 def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
     """
     Page d'affichage d'une séquence :
