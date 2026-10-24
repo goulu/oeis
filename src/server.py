@@ -868,7 +868,7 @@ def agent_card():
         "description": "Agent for discovering, searching, computing, and analyzing integer sequences from OEIS.",
         "supportedInterfaces": [
             {
-                "serviceUrl": "https://oeis.drgoulu.com/",
+                "url": "https://oeis.drgoulu.com/",
                 "protocol": "http"
             }
         ],
@@ -901,25 +901,20 @@ def auth_md():
     """Publie les métadonnées et instructions d'authentification pour agents (auth.md)."""
     content = """# auth.md
 
-## Authentication & Access for AI Agents
+## Agent Registration
 
-The OEIS Python service at `https://oeis.drgoulu.com` provides open, unauthenticated access to integer sequence data, metadata, and calculation tools.
+This service provides public, open-access resources and automated agent discovery.
 
-### Public Access Policy
-- **Authentication**: None required. All search, calculation, and documentation endpoints are publicly accessible.
-- **Audience**: AI Agents, web crawlers, and developers.
-- **Endpoints**:
-  - `GET /api/search?q={query}` : Search sequences by ID, terms, or keywords.
-  - `GET /api/compute/{seq_id}` : Evaluate itemf(n) or containf(x).
-  - `GET /{seq_id}` : Get HTML or Markdown (with `Accept: text/markdown`).
-- **Fair Use**: Rate limiting is minimal but agents are expected to respect `robots.txt` guidelines.
+### Registration Endpoint
+No prior manual registration or token provisioning is required to interact with the OEIS APIs. Automated agents may register or self-identify by including a descriptive `User-Agent` header in HTTP requests.
 
-### Discovery Endpoints
-- A2A Agent Card: `/.well-known/agent-card.json`
-- Model Context Protocol (MCP): `/.well-known/mcp/server-card.json`
-- API Catalog (RFC 9727): `/.well-known/api-catalog`
-- Agentic Resource Discovery (ARD): `/.well-known/ai-catalog.json`
-- Agent Skills Index: `/.well-known/agent-skills/index.json`
+### Supported Methods
+- Anonymous access: `identity_types_supported: ["anonymous"]`
+- Method: Direct HTTP requests without bearer token.
+- Discovery: Available via A2A (`/.well-known/agent-card.json`) and MCP (`/.well-known/mcp/server-card.json`).
+
+### Credential Use
+Credentials and bearer tokens are not required. Automated agents should specify appropriate content negotiation headers (`Accept: text/markdown` or `Accept: application/json`).
 """
     return Response(
         content=content,
