@@ -5,12 +5,13 @@ selon les spécifications de https://oeis.org/eishelp1.html et les combine avec 
 locale SQLite si disponible.
 """
 
+import itertools
+import logging
 import os
 import re
 import sqlite3
-import urllib.request
 import urllib.error
-import logging
+import urllib.request
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'seq')) else SRC_DIR
@@ -255,11 +256,12 @@ def parse_oeis_seq(content: str, sid: str = "") -> dict:
     }
 
 
-def fetch_oeis_seq_from_github(seq_id: str, timeout: int = 10) -> dict:
+def fetch_oeis_seq_from_github(seq_id: str, timeout: int = 10, conn=None) -> dict:
     """
     Télécharge et parse le fichier .seq d'une séquence depuis GitHub (oeisdata) :
     https://raw.githubusercontent.com/oeis/oeisdata/refs/heads/main/seq/{prefix}/{sid}.seq
     selon la spécification https://oeis.org/eishelp1.html.
+    Met à jour ou crée les DATA dans la base de données SQLite.
     """
     sid = normalize_seq_id(seq_id)
     prefix = sid[:4]
@@ -271,27 +273,81 @@ def fetch_oeis_seq_from_github(seq_id: str, timeout: int = 10) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             content = response.read().decode('utf-8', errors='replace')
-            return parse_oeis_seq(content, sid)
+            data = parse_oeis_seq(content, sid)
+            sync_sequence_to_db(data, conn=conn)
+            return data
     except Exception as e:
         logging.warning("Impossible de récupérer %s depuis %s : %s", sid, url, e)
         return None
 
 
-def sync_sequence_to_db(seq_data: dict, conn) -> None:
+def read_oeis_seq_file(file_path_or_content: str, sid: str = "", conn=None) -> dict:
     """
-    Enregistre ou met à jour les informations de base de la séquence dans SQLite (tables sequences et sequences_fts).
+    Lit un fichier .seq (chemin de fichier sur le disque ou contenu texte),
+    parse les données selon la spécification https://oeis.org/eishelp1.html
+    et met à jour ou crée les DATA dans la base de données SQLite.
     """
-    if not conn or not seq_data.get('id'):
+    if os.path.exists(file_path_or_content) and os.path.isfile(file_path_or_content):
+        with open(file_path_or_content, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+        if not sid:
+            base = os.path.basename(file_path_or_content)
+            name_part = os.path.splitext(base)[0]
+            if name_part.upper().startswith('A') and name_part[1:].isdigit():
+                sid = normalize_seq_id(name_part)
+    else:
+        content = file_path_or_content
+
+    data = parse_oeis_seq(content, sid=sid)
+    sync_sequence_to_db(data, conn=conn)
+    return data
+
+
+def sync_sequence_to_db(seq_data: dict, conn=None) -> None:
+    """
+    Enregistre ou met à jour les informations et les DATA d'une séquence dans SQLite :
+    - Table 'sequences' (métadonnées et terms_preview)
+    - Table 'seq' (termes numériques bruts avec compression RLE id, i, n, repeat)
+    - Table 'ngram_index' (index inversé de 3-grams pour la recherche instantanée)
+    - Table 'sequences_fts' (index plein texte FTS5)
+    """
+    if not seq_data or not seq_data.get('id'):
         return
+
+    close_conn = False
+    if conn is None:
+        if os.path.exists(DEFAULT_DB_PATH):
+            try:
+                conn = sqlite3.connect(DEFAULT_DB_PATH)
+                close_conn = True
+            except Exception as e:
+                logging.warning("Impossible d'ouvrir la base pour synchroniser %s : %s", seq_data.get('id'), e)
+                return
+        else:
+            return
+
     try:
         cursor = conn.cursor()
-        sid = seq_data['id']
+        sid = normalize_seq_id(seq_data['id'])
         name = seq_data.get('name', '')
         offset_val = seq_data.get('offset_val', 0)
-        terms_preview = seq_data.get('terms_preview', '')
         keywords = seq_data.get('keywords', '')
         author = seq_data.get('author', '')
 
+        # 1. Extraction et conversion des termes numériques (DATA)
+        raw_terms = seq_data.get('terms', [])
+        int_terms = []
+        for t in raw_terms:
+            try:
+                s_val = str(t).strip()
+                if s_val:
+                    int_terms.append(int(s_val))
+            except (ValueError, TypeError):
+                continue
+
+        terms_preview = ', '.join(str(t) for t in int_terms[:30]) if int_terms else seq_data.get('terms_preview', '')
+
+        # 2. Mise à jour / Création dans la table sequences
         cursor.execute("SELECT id FROM sequences WHERE id = ?", (sid,))
         exists = cursor.fetchone() is not None
 
@@ -310,16 +366,48 @@ def sync_sequence_to_db(seq_data: dict, conn) -> None:
                 INSERT INTO sequences (id, name, offset_val, terms_preview, keywords, author)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (sid, name, offset_val, terms_preview, keywords, author))
-            try:
+
+        # 3. Mise à jour / Création des DATA dans la table seq (RLE)
+        numeric_id = int(sid[1:]) if sid[1:].isdigit() else None
+        if numeric_id is not None:
+            cursor.execute("DELETE FROM seq WHERE id = ?", (numeric_id,))
+            if int_terms:
+                i = 1
+                for n_val, group in itertools.groupby(int_terms):
+                    r_val = len(list(group))
+                    if -9223372036854775808 <= n_val <= 9223372036854775807:
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO seq (id, i, n, repeat)
+                            VALUES (?, ?, ?, ?)
+                        """, (numeric_id, i, n_val, r_val))
+                    i += r_val
+
+        # 4. Mise à jour / Création des DATA dans la table ngram_index (3-Grams)
+        cursor.execute("DELETE FROM ngram_index WHERE sequence_id = ?", (sid,))
+        if len(int_terms) >= 3:
+            for pos in range(len(int_terms) - 2):
+                triplet = (int_terms[pos], int_terms[pos + 1], int_terms[pos + 2])
+                triplet_hash = hash(triplet)
                 cursor.execute("""
-                    INSERT INTO sequences_fts (id, name, keywords, author)
-                    VALUES (?, ?, ?, ?)
-                """, (sid, name, keywords, author))
-            except Exception:
-                pass
+                    INSERT OR IGNORE INTO ngram_index (ngram_hash, sequence_id, offset_pos)
+                    VALUES (?, ?, ?)
+                """, (triplet_hash, sid, pos))
+
+        # 5. Indexation plein-texte FTS5
+        try:
+            cursor.execute("""
+                INSERT OR REPLACE INTO sequences_fts (id, name, keywords, author)
+                VALUES (?, ?, ?, ?)
+            """, (sid, name, keywords, author))
+        except Exception:
+            pass
+
         conn.commit()
     except Exception as e:
-        logging.warning("Erreur lors de la synchronisation de %s en base : %s", seq_data.get('id'), e)
+        logging.warning("Erreur lors de la synchronisation des DATA de %s en base : %s", seq_data.get('id'), e)
+    finally:
+        if close_conn and conn:
+            conn.close()
 
 
 def get_sequence_data(seq_id, conn=None):
@@ -331,8 +419,8 @@ def get_sequence_data(seq_id, conn=None):
     """
     sid = normalize_seq_id(seq_id)
 
-    # 1. Extraction officielle depuis GitHub oeisdata
-    oeis_data = fetch_oeis_seq_from_github(sid)
+    # 1. Extraction officielle depuis GitHub oeisdata (met à jour/crée la base SQLite et ses DATA)
+    oeis_data = fetch_oeis_seq_from_github(sid, conn=conn)
 
     # 2. Récupération des informations locales dans SQLite
     db_data = {}
@@ -364,7 +452,7 @@ def get_sequence_data(seq_id, conn=None):
     if not oeis_data and not db_data:
         return None
 
-    # Synchronisation de la base si données distantes disponibles
+    # Synchronisation de secours si besoin
     if oeis_data and conn is not None:
         sync_sequence_to_db(oeis_data, conn)
 
@@ -406,12 +494,10 @@ def format_sequence_markdown(data):
     md.append("### DATA")
     md.append("```text")
     if terms_list:
-        chunks = []
-        for i in range(0, len(terms_list), 20):
-            chunks.append(', '.join(terms_list[i:i+20]))
-        md.append(',\n'.join(chunks))
+        clean_terms = [str(t).strip() for t in terms_list if str(t).strip()]
+        md.append(', '.join(clean_terms))
     elif data.get('terms_preview'):
-        md.append(data['terms_preview'])
+        md.append(' '.join(str(data['terms_preview']).split()))
     else:
         md.append("Terms not computed")
     md.append("```\n")

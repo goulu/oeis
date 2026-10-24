@@ -74,6 +74,7 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             background-color: var(--bg-body);
             color: var(--text-main);
             line-height: 1.6;
+            overflow-x: hidden;
         }}
 
         /* Header Style OEIS */
@@ -256,11 +257,19 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
-            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
             font-size: 0.9rem;
             line-height: 1.45;
             margin: 0.8rem 0;
+        }}
+
+        .markdown-body pre code {{
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }}
 
         .markdown-body code {{
@@ -531,7 +540,7 @@ def index_page():
         <div style="background: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 1.2rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
             <div style="font-weight: 700; font-size: 1.1rem;"><a href="/{s['id']}" style="color: var(--primary); text-decoration: none;">{s['id']}</a></div>
             <div style="color: #475569; font-size: 0.9rem; margin: 0.4rem 0;">{s['name']}</div>
-            <div style="font-family: monospace; font-size: 0.8rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; overflow-x: auto; white-space: nowrap;">{s['terms_preview']}</div>
+            <div style="font-family: monospace; font-size: 0.8rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; overflow-wrap: anywhere; word-break: break-word;">{s['terms_preview']}</div>
         </div>
         """
     samples_html += '</div>'
@@ -632,7 +641,7 @@ def search_page(q: str = ""):
                 <div style="font-size: 1.15rem; font-weight: 700;">
                     <a href="/{r['id']}" style="color: var(--primary); text-decoration: none;">{r['id']}</a> : {r['name']} {score_badge}
                 </div>
-                <div style="font-family: monospace; font-size: 0.85rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; margin: 0.4rem 0;">
+                <div style="font-family: monospace; font-size: 0.85rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; margin: 0.4rem 0; overflow-wrap: anywhere; word-break: break-word;">
                     {r['terms']}
                 </div>
                 <div style="font-size: 0.82rem; color: #16a34a; font-weight: 500;">&check; {r.get('match_desc', '')}</div>

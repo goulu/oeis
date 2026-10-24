@@ -6,6 +6,7 @@ d'un fichier .seq selon https://oeis.org/eishelp1.html et conversion des liens l
 import os
 import unittest
 import tempfile
+import sqlite3
 
 from src.markdown_generator import (
     normalize_seq_id,
@@ -15,6 +16,8 @@ from src.markdown_generator import (
     localize_sequence_links,
     format_sequence_markdown,
     generate_sequence_markdown,
+    sync_sequence_to_db,
+    read_oeis_seq_file,
 )
 
 SAMPLE_SEQ_CONTENT = """%I A000003 M0196 N0073 #95 May 07 2026 17:55:20
@@ -132,6 +135,10 @@ class TestMarkdownGenerator(unittest.TestCase):
         self.assertIn("[Table of n, a(n) for n = 1..20000](https://oeis.org/A000003/b000003.txt)", md)
         self.assertIn("[_Joerg Arndt_](https://oeis.org/wiki/User:Joerg_Arndt)", md)
         self.assertIn("[_N. J. A. Sloane_](https://oeis.org/wiki/User:N._J._A._Sloane)", md)
+        # Vérification qu'il n'y a pas de retour à la ligne dans la section DATA
+        data_block = md.split("### DATA\n```text\n")[1].split("\n```")[0]
+        self.assertNotIn("\n", data_block)
+        self.assertTrue(data_block.startswith("1, 1, 1, 1, 2, 2"))
 
     def test_generate_sequence_markdown(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -140,6 +147,86 @@ class TestMarkdownGenerator(unittest.TestCase):
             self.assertIn("# A000003", content)
             self.assertIn("Number of classes", content)
             self.assertIn("[A014599](A014599)", content)
+
+    def test_sync_data_to_db(self):
+        schema = """
+        CREATE TABLE sequences (id VARCHAR(7) PRIMARY KEY, name TEXT, offset_val INTEGER, terms_preview TEXT, keywords TEXT, author TEXT);
+        CREATE TABLE seq (id INTEGER NOT NULL, i INTEGER NOT NULL, n INTEGER NOT NULL, repeat INTEGER NOT NULL, PRIMARY KEY(id, i, n));
+        CREATE TABLE ngram_index (ngram_hash INTEGER NOT NULL, sequence_id VARCHAR(7) NOT NULL, offset_pos INTEGER NOT NULL, PRIMARY KEY(ngram_hash, sequence_id, offset_pos));
+        """
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(schema)
+
+        # 1. Création initiale des DATA
+        data = parse_oeis_seq(SAMPLE_SEQ_CONTENT, "A000003")
+        sync_sequence_to_db(data, conn=conn)
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, terms_preview FROM sequences WHERE id = 'A000003'")
+        row = cursor.fetchone()
+        self.assertIsNotNone(row)
+        self.assertTrue(row[2].startswith("1, 1, 1, 1, 2, 2"))
+
+        # Vérifier table seq (RLE)
+        cursor.execute("SELECT i, n, repeat FROM seq WHERE id = 3 ORDER BY i")
+        seq_rows = cursor.fetchall()
+        self.assertTrue(len(seq_rows) > 0)
+        # Reconstruire les termes à partir de la table seq
+        rebuilt = []
+        for i_pos, n_val, r_val in seq_rows:
+            rebuilt.extend([n_val] * r_val)
+        self.assertEqual(len(rebuilt), 100)
+        self.assertEqual(rebuilt[:6], [1, 1, 1, 1, 2, 2])
+
+        # Vérifier table ngram_index
+        cursor.execute("SELECT count(*) FROM ngram_index WHERE sequence_id = 'A000003'")
+        ng_count = cursor.fetchone()[0]
+        self.assertEqual(ng_count, 100 - 2)
+
+        # 2. Mise à jour des DATA avec de nouvelles valeurs
+        updated_content = """%I A000003
+%S A000003 5, 5, 5, 10, 20
+%N A000003 Updated Title
+"""
+        updated_data = parse_oeis_seq(updated_content, "A000003")
+        sync_sequence_to_db(updated_data, conn=conn)
+
+        cursor.execute("SELECT name, terms_preview FROM sequences WHERE id = 'A000003'")
+        row2 = cursor.fetchone()
+        self.assertEqual(row2[0], "Updated Title")
+        self.assertEqual(row2[1], "5, 5, 5, 10, 20")
+
+        cursor.execute("SELECT i, n, repeat FROM seq WHERE id = 3 ORDER BY i")
+        new_seq_rows = cursor.fetchall()
+        self.assertEqual(new_seq_rows, [(1, 5, 3), (4, 10, 1), (5, 20, 1)])
+
+        cursor.execute("SELECT count(*) FROM ngram_index WHERE sequence_id = 'A000003'")
+        self.assertEqual(cursor.fetchone()[0], 3)  # (5,5,5), (5,5,10), (5,10,20)
+
+    def test_read_oeis_seq_file(self):
+        schema = """
+        CREATE TABLE sequences (id VARCHAR(7) PRIMARY KEY, name TEXT, offset_val INTEGER, terms_preview TEXT, keywords TEXT, author TEXT);
+        CREATE TABLE seq (id INTEGER NOT NULL, i INTEGER NOT NULL, n INTEGER NOT NULL, repeat INTEGER NOT NULL, PRIMARY KEY(id, i, n));
+        CREATE TABLE ngram_index (ngram_hash INTEGER NOT NULL, sequence_id VARCHAR(7) NOT NULL, offset_pos INTEGER NOT NULL, PRIMARY KEY(ngram_hash, sequence_id, offset_pos));
+        """
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(schema)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            seq_path = os.path.join(tmp_dir, "A000045.seq")
+            with open(seq_path, "w", encoding="utf-8") as f:
+                f.write("%I A000045\n%S A000045 0, 1, 1, 2, 3, 5, 8, 13\n%N A000045 Fibonacci numbers\n")
+
+            data = read_oeis_seq_file(seq_path, conn=conn)
+            self.assertEqual(data["id"], "A000045")
+            self.assertEqual(data["terms"], ["0", "1", "1", "2", "3", "5", "8", "13"])
+
+            cursor = conn.cursor()
+            cursor.execute("SELECT terms_preview FROM sequences WHERE id = 'A000045'")
+            self.assertEqual(cursor.fetchone()[0], "0, 1, 1, 2, 3, 5, 8, 13")
+
+            cursor.execute("SELECT n, repeat FROM seq WHERE id = 45 ORDER BY i")
+            self.assertEqual(cursor.fetchall(), [(0, 1), (1, 2), (2, 1), (3, 1), (5, 1), (8, 1), (13, 1)])
 
 
 if __name__ == "__main__":
