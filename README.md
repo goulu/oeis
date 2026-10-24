@@ -98,7 +98,7 @@ The database ([`create.sql`](create.sql)) is organized into relational tables de
 ## On-The-Fly Markdown & Web Server
 
 ### Markdown Synchronization
-Whenever a sequence implementation or description is modified in the database, [`src/markdown_generator.py`](src/markdown_generator.py) regenerates a standalone Markdown document in the `sequences/` directory (e.g., [`sequences/A000045.md`](sequences/A000045.md)).
+Whenever a sequence implementation or description is modified in the database, [`src/markdown_generator.py`](src/markdown_generator.py) regenerates a standalone Markdown document in the `seq/` directory (e.g., [`seq/A000045.md`](seq/A000045.md)).
 
 Each generated Markdown sheet mirrors the canonical OEIS layout:
 * **DATA**: Integer terms.
@@ -127,7 +127,7 @@ oeis/
 │   └── init_db.py                # Database population & AST source code extractor
 ├── tests/                        # Automated test suite
 │   └── test_oeis.py              # Verification against reference OEIS b-files
-├── sequences/                    # Generated Markdown sheets (A000045.md, etc.)
+├── seq/                          # Generated Markdown sheets (A000045.md, etc.)
 ├── create.sql                    # Relational and FTS5 database schema
 ├── design.md                     # Comprehensive architecture and security specification
 ├── pyproject.toml                # Package configuration & pytest settings

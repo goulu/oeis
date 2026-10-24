@@ -13,9 +13,9 @@ import urllib.error
 import logging
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'sequences')) else SRC_DIR
+BASE_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'seq')) else SRC_DIR
 DEFAULT_DB_PATH = os.path.join(BASE_DIR, 'oeis.db')
-DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, 'sequences')
+DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, 'seq')
 OEIS_RAW_URL_TEMPLATE = "https://raw.githubusercontent.com/oeis/oeisdata/refs/heads/main/seq/{prefix}/{sid}.seq"
 
 

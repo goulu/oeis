@@ -23,9 +23,9 @@ from search_engine import OEISSearchEngine
 
 app = FastAPI(title="OEIS Python Clone", version="1.0.0")
 
-ROOT_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'sequences')) else SRC_DIR
+ROOT_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'oeis.db')) or os.path.exists(os.path.join(os.path.dirname(SRC_DIR), 'seq')) else SRC_DIR
 DB_PATH = os.path.join(ROOT_DIR, 'oeis.db')
-SEQUENCES_DIR = os.path.join(ROOT_DIR, 'sequences')
+SEQUENCES_DIR = os.path.join(ROOT_DIR, 'seq')
 search_engine = OEISSearchEngine(DB_PATH)
 
 
@@ -871,7 +871,7 @@ def sequence_page(seq_id: str, direct: bool = False):
             <a href="/edit/{sid}">&#9998; Proposer une implémentation</a>
         </div>
         <div style="font-size: 0.8rem; color: var(--text-muted);">
-            Source : <code>sequences/{sid}.md</code>
+            Source : <code>seq/{sid}.md</code>
         </div>
     </div>
     """
