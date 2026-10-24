@@ -110,6 +110,13 @@ class TestMarkdownGenerator(unittest.TestCase):
             "```python\nA000045 = 1\n```\n`A000045` and [A000045](A000045)"
         )
 
+        # Noms d'utilisateurs _Nom_ convertis en liens wiki User:
+        text5 = "From _Robert G. Wilson v_, Jan 15 2002 and _N. J. A. Sloane_"
+        self.assertEqual(
+            localize_sequence_links(text5),
+            "From [_Robert G. Wilson v_](https://oeis.org/wiki/User:Robert_G._Wilson_v), Jan 15 2002 and [_N. J. A. Sloane_](https://oeis.org/wiki/User:N._J._A._Sloane)"
+        )
+
     def test_format_sequence_markdown(self):
         data = parse_oeis_seq(SAMPLE_SEQ_CONTENT, "A000003")
         md = format_sequence_markdown(data)
@@ -123,6 +130,8 @@ class TestMarkdownGenerator(unittest.TestCase):
         self.assertIn("### CROSSREFERENCES", md)
         self.assertIn("[A014599](A014599)", md)
         self.assertIn("[Table of n, a(n) for n = 1..20000](https://oeis.org/A000003/b000003.txt)", md)
+        self.assertIn("[_Joerg Arndt_](https://oeis.org/wiki/User:Joerg_Arndt)", md)
+        self.assertIn("[_N. J. A. Sloane_](https://oeis.org/wiki/User:N._J._A._Sloane)", md)
 
     def test_generate_sequence_markdown(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

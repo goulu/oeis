@@ -33,8 +33,9 @@ def normalize_seq_id(seq_id: str) -> str:
 
 def localize_sequence_links(text: str) -> str:
     """
-    Remplace tous les noms de séquences Axxxxxx et liens vers des séquences par des liens locaux :
-    par exemple A001622 -> [A001622](A001622), [A001622](https://oeis.org/A001622) -> [A001622](A001622).
+    Remplace tous les noms de séquences Axxxxxx et liens vers des séquences par des liens locaux,
+    et convertit tous les noms d'utilisateurs encadrés par des _ (ex: _Robert G. Wilson v_)
+    en liens vers leur page wiki OEIS (https://oeis.org/wiki/User:Robert_G._Wilson_v).
     Les liens vers des sous-pages ou documents comme https://oeis.org/A000045/b000045.txt
     restent inchangés. Les blocs de code et le titre principal H1 sont préservés.
     """
@@ -46,12 +47,13 @@ def localize_sequence_links(text: str) -> str:
         r"(https?://[^\s)\]>]+)|"           # 5. URLs autonomes
         r"(<a\s+[^>]*>.*?</a>)|"            # 6. Balises anchor HTML
         r"(<[^>]+>)|"                       # 7. Autres balises HTML / autolinks
-        r"(\bA\d{6}\b)",                    # 8. Noms de séquences OEIS Axxxxxx
+        r"(\bA\d{6}\b)|"                    # 8. Noms de séquences OEIS Axxxxxx
+        r"(?<![a-zA-Z0-9])_([A-Z][a-zA-Z0-9\.,\x27\u00C0-\u017F -]{1,50}[a-zA-Z0-9\.\u00C0-\u017F])_(?![a-zA-Z0-9])",  # 9. Utilisateurs _Nom Prénom_
         re.DOTALL | re.IGNORECASE | re.MULTILINE
     )
 
     def repl(m):
-        code_block, inline_code, h1_title, md_link, url, a_tag, other_tag, seq_name = m.groups()
+        code_block, inline_code, h1_title, md_link, url, a_tag, other_tag, seq_name, username = m.groups()
         if code_block:
             return code_block
         elif inline_code:
@@ -94,6 +96,11 @@ def localize_sequence_links(text: str) -> str:
         elif seq_name:
             sid = seq_name.upper()
             return f"[{sid}]({sid})"
+        elif username:
+            if username in ("Start", "End"):
+                return m.group(0)
+            user_slug = "_".join(username.strip().split())
+            return f"[_{username}_](https://oeis.org/wiki/User:{user_slug})"
         return m.group(0)
 
     return token_pattern.sub(repl, text)
