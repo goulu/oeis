@@ -40,7 +40,7 @@ def get_db():
 def render_page(title: str, content_html: str, query: str = "", seq_id: str = "") -> str:
     """Génère le gabarit HTML complet avec le design moderne inspiré d'OEIS."""
     return f"""<!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -447,18 +447,18 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
                 </div>
             </a>
             <div class="header-links">
-                <a href="/">Accueil</a>
+                <a href="/">Home</a>
                 <a href="/A000045">A000045 (Fibonacci)</a>
-                <a href="/hints.html">Aide Recherche</a>
+                <a href="/hints.html">Search Hints</a>
             </div>
         </div>
         <div class="search-container">
             <form action="/search" method="GET" class="search-form">
-                <input type="text" name="q" value="{query}" placeholder="Recherche par termes (ex: 1, 1, 2, 3, 5, 8) ou mot-clé ou identifiant (ex: A000045)..." class="search-input">
-                <button type="submit" class="search-btn">Rechercher</button>
+                <input type="text" name="q" value="{query}" placeholder="Search by terms (e.g. 1, 1, 2, 3, 5, 8), keyword, or sequence ID (e.g. A000045)..." class="search-input">
+                <button type="submit" class="search-btn">Search</button>
             </form>
             <div class="search-hints">
-                Exemples : <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
+                Examples: <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
             </div>
         </div>
     </header>
@@ -468,41 +468,41 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
     </main>
 
     <footer>
-        <p>Inspiré par Neil Sloane's OEIS Foundation &bull; Implémentation basée sur Goulib <code>Sequence</code> &bull; Rendu Markdown &rarr; HTML à la volée</p>
+        <p>Inspired by Neil Sloane's OEIS Foundation &bull; Implementation based on Goulib <code>Sequence</code> &bull; On-the-fly Markdown &rarr; HTML rendering</p>
     </footer>
 
     <script>
     async function testItemf(seqId) {{
         const n = document.getElementById('itemf-n').value;
         const out = document.getElementById('test-result');
-        out.innerText = 'Calcul en cours...';
+        out.innerText = 'Computing...';
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?itemf_n=${{n}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = 'Erreur : ' + data.error;
+                out.innerText = 'Error: ' + data.error;
             }} else {{
                 out.innerText = `itemf(${{n}}) = ${{data.result}}`;
             }}
         }} catch(e) {{
-            out.innerText = 'Erreur réseau : ' + e.message;
+            out.innerText = 'Network error: ' + e.message;
         }}
     }}
 
     async function testContainf(seqId) {{
         const x = document.getElementById('containf-x').value;
         const out = document.getElementById('test-result');
-        out.innerText = 'Test en cours...';
+        out.innerText = 'Testing...';
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?containf_x=${{x}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = 'Erreur : ' + data.error;
+                out.innerText = 'Error: ' + data.error;
             }} else {{
-                out.innerText = `containf(${{x}}) = ${{data.result}} (${{data.result ? 'Appartient à la suite' : 'N\'appartient PAS à la suite'}})`;
+                out.innerText = `containf(${{x}}) = ${{data.result}} (${{data.result ? 'Belongs to sequence' : 'Does NOT belong to sequence'}})`;
             }}
         }} catch(e) {{
-            out.innerText = 'Erreur réseau : ' + e.message;
+            out.innerText = 'Network error: ' + e.message;
         }}
     }}
     </script>
@@ -538,22 +538,22 @@ def index_page():
 
     home_content = f"""
     <div class="sequence-card">
-        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Bienvenue sur le Clone OEIS en Python</h2>
+        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Welcome to the OEIS Python Clone</h2>
         <p style="color: var(--text-muted); font-size: 1rem; margin-bottom: 1.5rem;">
-            Plateforme collaborative pour suites numériques infinies intégrant la classe <code>Sequence</code> avec les fonctions <code>iterf</code>, <code>itemf</code> et <code>containf</code>.
+            Collaborative platform for infinite integer sequences integrating the <code>Sequence</code> class with <code>iterf</code>, <code>itemf</code> and <code>containf</code> methods.
         </p>
 
         <div style="display: flex; gap: 2rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 1.2rem; margin-bottom: 1.5rem;">
-            <div><strong>{nb_seqs}</strong> suites indexées</div>
-            <div><strong>100%</strong> définies avec <code>Sequence</code></div>
-            <div><strong>Génération Markdown</strong> automatique & conversion HTML à la volée</div>
+            <div><strong>{nb_seqs}</strong> indexed sequences</div>
+            <div><strong>100%</strong> defined with <code>Sequence</code></div>
+            <div><strong>Automatic Markdown generation</strong> & on-the-fly HTML conversion</div>
         </div>
 
-        <h3 style="color: var(--oeis-blue); border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem;">Suites Remarquables</h3>
+        <h3 style="color: var(--oeis-blue); border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem;">Featured Sequences</h3>
         {samples_html}
     </div>
     """
-    return render_page("Accueil", home_content)
+    return render_page("Home", home_content)
 
 
 @app.get("/hints.html", response_class=HTMLResponse)
@@ -561,33 +561,33 @@ def hints_page():
     """Page d'aide à la recherche conforme à hints.html."""
     hints_content = """
     <div class="sequence-card">
-        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Aide et Syntaxe de Recherche</h2>
+        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Search Hints and Syntax</h2>
         <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-            Le moteur de recherche implémente les fonctionnalités décrites sur <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.
+            The search engine implements features described at <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.
         </p>
 
-        <h3 style="color: var(--oeis-blue);">1. Recherche de séquences de nombres</h3>
+        <h3 style="color: var(--oeis-blue);">1. Number sequence search</h3>
         <ul>
-            <li><strong>Termes consécutifs</strong> : entrez les termes séparés par des virgules ou des espaces :<br>
-                <code>1, 1, 2, 3, 5, 8, 13</code> ou <code>10946, 17711, 28657</code>
+            <li><strong>Consecutive terms</strong>: enter terms separated by commas or spaces:<br>
+                <code>1, 1, 2, 3, 5, 8, 13</code> or <code>10946, 17711, 28657</code>
             </li>
-            <li><strong>Wildcard d'un terme (<code>_</code>)</strong> : remplace un nombre quelconque :<br>
+            <li><strong>Single term wildcard (<code>_</code>)</strong>: matches any single number:<br>
                 <code>1, 2, _, 4, 5</code>
             </li>
-            <li><strong>Wildcard de sous-séquence (<code>__</code>)</strong> : remplace une suite de termes :<br>
+            <li><strong>Subsequence wildcard (<code>__</code>)</strong>: matches a sequence of terms:<br>
                 <code>1, 2, __, 8, 13</code>
             </li>
         </ul>
 
-        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">2. Préfixes de champs</h3>
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">2. Field prefixes</h3>
         <ul>
-            <li><code>id:A000045</code> : recherche par identifiant direct</li>
-            <li><code>author:Philippe</code> : recherche par nom d'auteur</li>
-            <li><code>keyword:core</code> : recherche par mot-clé OEIS</li>
+            <li><code>id:A000045</code>: direct sequence lookup</li>
+            <li><code>author:Philippe</code>: search by author name</li>
+            <li><code>keyword:core</code>: search by OEIS keyword</li>
         </ul>
 
-        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">3. Recherche plein texte</h3>
-        <p>Les mots simples sont recherchés dans les descriptions et métadonnées via l'index FTS5 :</p>
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">3. Full-text search</h3>
+        <p>Simple words are searched in descriptions and metadata using the FTS5 index:</p>
         <ul>
             <li><code>Fibonacci</code></li>
             <li><code>square numbers</code></li>
@@ -595,7 +595,7 @@ def hints_page():
         </ul>
     </div>
     """
-    return render_page("Aide Recherche", hints_content)
+    return render_page("Search Hints", hints_content)
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -612,18 +612,18 @@ def search_page(q: str = ""):
     # Exécution de la recherche via OEISSearchEngine
     results = search_engine.search(query, limit=50)
 
-    res_html = f'<div class="sequence-card"><h2>Résultats de recherche pour : "{query}"</h2>'
+    res_html = f'<div class="sequence-card"><h2>Search results for: "{query}"</h2>'
     if not results:
         res_html += f"""
         <p style="color: var(--text-muted); margin-top: 1rem;">
-            Aucune séquence trouvée pour cette requête.
+            No sequences found for this query.
         </p>
         <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #64748b;">
-            Conseils : essayez avec moins de termes, vérifiez les virgules ou consultez <a href="/hints.html">l'aide à la recherche</a>.
+            Tips: try fewer terms, check commas, or see <a href="/hints.html">search hints</a>.
         </p>
         """
     else:
-        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{len(results)} résultat(s) trouvé(s) (classés par score de pertinence) :</p>'
+        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{len(results)} result(s) found (ranked by relevance score):</p>'
         for r in results:
             score = r.get('score', 0)
             score_badge = f'<span style="background: #e0f2fe; color: #0369a1; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.8rem; margin-left: 0.5rem;">+{score}</span>'
@@ -639,7 +639,7 @@ def search_page(q: str = ""):
             </div>
             """
     res_html += '</div>'
-    return render_page(f"Recherche: {query}", res_html, query=query)
+    return render_page(f"Search: {query}", res_html, query=query)
 
 
 @app.get("/raw/{seq_id}.md", response_class=PlainTextResponse)
@@ -654,7 +654,7 @@ def raw_markdown(seq_id: str):
         try:
             generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
         except ValueError:
-            raise HTTPException(status_code=404, detail="Séquence introuvable.")
+            raise HTTPException(status_code=404, detail="Sequence not found.")
         finally:
             conn.close()
 
@@ -671,7 +671,7 @@ def api_eval_sequence(seq_id: str, itemf_n: int = None, containf_x: int = None):
     try:
         import oeis
         if sid not in oeis.oeis:
-            return {"error": f"Séquence {sid} introuvable dans le module Python."}
+            return {"error": f"Sequence {sid} not found in Python module."}
         seq = oeis.oeis[sid]
 
         if itemf_n is not None:
@@ -688,7 +688,7 @@ def api_eval_sequence(seq_id: str, itemf_n: int = None, containf_x: int = None):
                 is_in = containf_x in seq
             return {"sequence": sid, "type": "containf", "x": containf_x, "result": bool(is_in)}
 
-        return {"error": "Paramètre itemf_n ou containf_x requis."}
+        return {"error": "Parameter itemf_n or containf_x required."}
     except Exception as e:
         return {"error": str(e)}
 
@@ -733,7 +733,7 @@ def api_update_sequence(
 
     return {
         "status": "success",
-        "message": f"Séquence {sid} mise à jour et fichier Markdown régénéré avec succès.",
+        "message": f"Sequence {sid} updated and Markdown file regenerated successfully.",
         "markdown_file": file_path
     }
 
@@ -749,16 +749,16 @@ def api_create_and_serve(seq_id: str):
         num = sid[1:]
         sid = f"A{num.zfill(6)}"
     else:
-        raise HTTPException(status_code=400, detail="Format d'identifiant OEIS invalide (attendu: Axxxxxx)")
+        raise HTTPException(status_code=400, detail="Invalid OEIS identifier format (expected: Axxxxxx)")
 
     conn = get_db()
     try:
         file_path, _ = generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
         return {"status": "success", "sequence_id": sid, "markdown_file": file_path}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable sur l'OEIS.")
+        raise HTTPException(status_code=404, detail=f"Sequence {sid} not found on OEIS.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération de {sid} : {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating {sid}: {str(e)}")
     finally:
         conn.close()
 
@@ -777,7 +777,7 @@ def sequence_page(seq_id: str, direct: bool = False):
         num = sid[1:]
         sid = f"A{num.zfill(6)}"
     else:
-        raise HTTPException(status_code=404, detail="Format d'identifiant OEIS invalide (attendu: Axxxxxx)")
+        raise HTTPException(status_code=404, detail="Invalid OEIS identifier format (expected: Axxxxxx)")
 
     md_file_path = os.path.join(SEQUENCES_DIR, f"{sid}.md")
 
@@ -789,7 +789,7 @@ def sequence_page(seq_id: str, direct: bool = False):
             try:
                 generate_sequence_markdown(sid, conn=conn, output_dir=SEQUENCES_DIR)
             except ValueError:
-                raise HTTPException(status_code=404, detail=f"Séquence {sid} introuvable sur l'OEIS.")
+                raise HTTPException(status_code=404, detail=f"Sequence {sid} not found on OEIS.")
             finally:
                 conn.close()
         else:
@@ -800,10 +800,10 @@ def sequence_page(seq_id: str, direct: bool = False):
             </noscript>
             <div class="please-wait-card">
                 <div class="spinner"></div>
-                <h2 class="please-wait-title">Séquence {sid}</h2>
+                <h2 class="please-wait-title">Sequence {sid}</h2>
                 <p class="please-wait-subtitle">
-                    Cette fiche n'existe pas encore localement.<br>
-                    Extraction des informations officielles depuis l'OEIS en cours...
+                    This sequence entry is not yet stored locally.<br>
+                    Fetching official data from OEIS in progress...
                 </p>
                 <div class="please-wait-badge" id="wait-badge">⏳ Please wait...</div>
                 <div id="error-container" style="display: none; margin-top: 1.5rem;"></div>
@@ -827,8 +827,8 @@ def sequence_page(seq_id: str, direct: bool = False):
                         if (errDiv) {{
                             errDiv.style.display = 'block';
                             errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600; margin-bottom: 1rem;">❌ ' + 
-                                (err.detail || "Impossible de récupérer la séquence sur l\\'OEIS.") + 
-                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">Retour à l\\'accueil</a>';
+                                (err.detail || "Unable to retrieve sequence from OEIS.") + 
+                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">Back to home</a>';
                         }}
                     }}
                 }} catch (e) {{
@@ -839,13 +839,13 @@ def sequence_page(seq_id: str, direct: bool = False):
                     const errDiv = document.getElementById('error-container');
                     if (errDiv) {{
                         errDiv.style.display = 'block';
-                        errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600;">❌ Erreur réseau lors de la génération.</div>';
+                        errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600;">❌ Network error during generation.</div>';
                     }}
                 }}
             }})();
             </script>
             """
-            return render_page(f"Séquence {sid} - Please wait", loading_html, seq_id=sid)
+            return render_page(f"Sequence {sid} - Please wait", loading_html, seq_id=sid)
 
     # Lecture du fichier Markdown
     with open(md_file_path, "r", encoding="utf-8") as f:
@@ -866,35 +866,35 @@ def sequence_page(seq_id: str, direct: bool = False):
     actions_bar = f"""
     <div class="sequence-actions">
         <div class="btn-group">
-            <a href="/raw/{sid}.md" target="_blank">&#128196; Voir Markdown brut</a>
-            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Page officielle OEIS.org</a>
-            <a href="/edit/{sid}">&#9998; Proposer une implémentation</a>
+            <a href="/raw/{sid}.md" target="_blank">&#128196; View raw Markdown</a>
+            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Official OEIS.org page</a>
+            <a href="/edit/{sid}">&#9998; Submit implementation</a>
         </div>
         <div style="font-size: 0.8rem; color: var(--text-muted);">
-            Source : <code>seq/{sid}.md</code>
+            Source: <code>seq/{sid}.md</code>
         </div>
     </div>
     """
 
     interactive_box = f"""
     <div class="interactive-box">
-        <h4>&#9881; Console d'évaluation en direct de la Sequence</h4>
+        <h4>&#9881; Live Sequence Evaluation Console</h4>
         <p style="font-size: 0.85rem; color: var(--text-muted);">
-            Testez directement dans cette page les fonctions <code>itemf(n)</code> et <code>containf(x)</code> :
+            Test the <code>itemf(n)</code> and <code>containf(x)</code> functions directly in this page:
         </p>
         <div class="test-controls">
             <div class="test-input-group">
-                <label for="itemf-n">Calculer terme <em>n</em> :</label>
+                <label for="itemf-n">Compute term <em>n</em>:</label>
                 <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
-                <button type="button" onclick="testItemf('{sid}')" class="test-button">Calculer itemf(n)</button>
+                <button type="button" onclick="testItemf('{sid}')" class="test-button">Compute itemf(n)</button>
             </div>
             <div class="test-input-group">
-                <label for="containf-x">Tester nombre <em>x</em> :</label>
+                <label for="containf-x">Test value <em>x</em>:</label>
                 <input type="number" id="containf-x" value="55" class="test-input">
-                <button type="button" onclick="testContainf('{sid}')" class="test-button">Tester containf(x)</button>
+                <button type="button" onclick="testContainf('{sid}')" class="test-button">Test containf(x)</button>
             </div>
         </div>
-        <div id="test-result" class="test-output">Résultat prêt. Cliquez sur un bouton ci-dessus.</div>
+        <div id="test-result" class="test-output">Result ready. Click a button above.</div>
     </div>
     """
 

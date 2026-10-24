@@ -345,7 +345,7 @@ def format_sequence_markdown(data):
     utilisant les données extraites selon la spécification https://oeis.org/eishelp1.html.
     """
     sid = data['id']
-    name = data.get('name') or 'Séquence sans titre'
+    name = data.get('name') or 'Untitled sequence'
     offset_str = data.get('offset_str') or f"{data.get('offset_val', 0)}, 1"
     keywords = data.get('keywords', '') or 'core,nice'
     author = data.get('author') or 'N. J. A. Sloane'
@@ -372,7 +372,7 @@ def format_sequence_markdown(data):
     elif data.get('terms_preview'):
         md.append(data['terms_preview'])
     else:
-        md.append("Termes non calculés")
+        md.append("Terms not computed")
     md.append("```\n")
 
     # Section Métadonnées (METADATA - %O, %K, %A, %I)
@@ -474,29 +474,29 @@ def format_sequence_markdown(data):
     # Section Implémentation Python Goulib / Sequence
     md.append("### PYTHON IMPLEMENTATION")
     if data.get('definition_code'):
-        md.append("Implémentation exécutable de la suite basée sur `goulib.sequence.Sequence` :\n")
+        md.append("Executable sequence implementation based on `goulib.sequence.Sequence`:\n")
         if data.get('auxiliary_code'):
-            md.append("#### Fonctions auxiliaires :")
+            md.append("#### Auxiliary functions:")
             md.append("```python")
             md.append(data['auxiliary_code'].strip())
             md.append("```\n")
 
-        md.append("#### Définition principale :")
+        md.append("#### Main definition:")
         md.append("```python")
         md.append(data['definition_code'].strip())
         md.append("```\n")
 
-        md.append("#### Détail des méthodes fournies :")
-        md.append("| Fonction | Expression | Description |")
+        md.append("#### Detail of provided methods:")
+        md.append("| Function | Expression | Description |")
         md.append("| :--- | :--- | :--- |")
-        iterf_str = f"`{data.get('iterf_code')}`" if data.get('iterf_code') else "*(aucun / count)*"
-        itemf_str = f"`{data.get('itemf_code')}`" if data.get('itemf_code') else "*(évaluation séquentielle)*"
-        containf_str = f"`{data.get('containf_code')}`" if data.get('containf_code') else "*(par recherche monotone)*"
-        md.append(f"| **`iterf`** | {iterf_str} | Générateur itérant sur la suite infinie |")
-        md.append(f"| **`itemf(n)`** | {itemf_str} | Calcul direct du $n$-ième terme |")
-        md.append(f"| **`containf(x)`** | {containf_str} | Test d'appartenance booléen ($x \\in S$) |")
+        iterf_str = f"`{data.get('iterf_code')}`" if data.get('iterf_code') else "*(none / count)*"
+        itemf_str = f"`{data.get('itemf_code')}`" if data.get('itemf_code') else "*(sequential evaluation)*"
+        containf_str = f"`{data.get('containf_code')}`" if data.get('containf_code') else "*(monotonic search)*"
+        md.append(f"| **`iterf`** | {iterf_str} | Generator iterating over the infinite sequence |")
+        md.append(f"| **`itemf(n)`** | {itemf_str} | Direct computation of $n$-th term |")
+        md.append(f"| **`containf(x)`** | {containf_str} | Boolean membership test ($x \\in S$) |")
     else:
-        md.append("*Pas encore d'implémentation Python enregistrée dans la base locale.*")
+        md.append("*No Python implementation recorded in the local database yet.*")
     md.append("")
 
     # Section Renvois et Cross-references (CROSSREFERENCES - %Y)
@@ -505,7 +505,7 @@ def format_sequence_markdown(data):
     if crossrefs:
         for y in crossrefs:
             md.append(f"- {format_crossref(y.strip())}")
-    md.append(f"- Voir également l'entrée officielle sur https://oeis.org/{sid}\n")
+    md.append(f"- See also the official entry at https://oeis.org/{sid}\n")
 
     # Section Extensions et Erreurs (%E)
     extensions = data.get('extensions', [])
@@ -538,7 +538,7 @@ def generate_sequence_markdown(seq_id, conn=None, output_dir=DEFAULT_OUTPUT_DIR)
     try:
         data = get_sequence_data(sid, conn)
         if not data:
-            raise ValueError(f"Séquence {sid} introuvable sur GitHub oeisdata ou en base locale.")
+            raise ValueError(f"Sequence {sid} not found on GitHub oeisdata or local database.")
 
         md_content = format_sequence_markdown(data)
         file_path = os.path.join(output_dir, f"{sid}.md")
@@ -557,5 +557,5 @@ if __name__ == "__main__":
 
     target_id = sys.argv[1] if len(sys.argv) > 1 else "A000003"
     fpath, content = generate_sequence_markdown(target_id)
-    print(f"Fichier Markdown généré avec succès : {fpath}")
-    print(f"Taille du fichier généré : {len(content)} octets")
+    print(f"Markdown file successfully generated: {fpath}")
+    print(f"Generated file size: {len(content)} bytes")

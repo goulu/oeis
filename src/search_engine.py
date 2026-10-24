@@ -116,7 +116,7 @@ class OEISSearchEngine:
                         'name': row['name'],
                         'terms': row['terms_preview'],
                         'score': 1000,
-                        'match_desc': f"Identifiant exact {row['id']}"
+                        'match_desc': f"Exact identifier {row['id']}"
                     })
                 conn.close()
                 return results
@@ -222,7 +222,7 @@ class OEISSearchEngine:
                     'name': seq_row['name'],
                     'terms': seq_row['terms_preview'],
                     'score': score,
-                    'match_desc': f"Sous-séquence consécutive [{term_str}] trouvée à la position {match_pos}"
+                    'match_desc': f"Consecutive subsequence [{term_str}] found at index {match_pos}"
                 })
 
         return results
@@ -290,7 +290,7 @@ class OEISSearchEngine:
                         'name': r['name'],
                         'terms': r['terms_preview'],
                         'score': 85,
-                        'match_desc': f"Auteur correspondant à '{v}'"
+                        'match_desc': f"Author matching '{v}'"
                     })
             elif k in ('keyword', 'keywords'):
                 cursor.execute("""
@@ -303,7 +303,7 @@ class OEISSearchEngine:
                         'name': r['name'],
                         'terms': r['terms_preview'],
                         'score': 80,
-                        'match_desc': f"Mot-clé correspondant à '{v}'"
+                        'match_desc': f"Keyword matching '{v}'"
                     })
         return results
 
@@ -328,7 +328,7 @@ class OEISSearchEngine:
                     'name': r['name'],
                     'terms': r['terms_preview'],
                     'score': 50 - r['rank'],
-                    'match_desc': "Correspondance textuelle FTS5"
+                    'match_desc': "Full-text FTS5 match"
                 })
         except sqlite3.OperationalError:
             pass
