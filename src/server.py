@@ -859,6 +859,75 @@ def ai_catalog():
     )
 
 
+@app.get("/.well-known/agent-card.json")
+def agent_card():
+    """Publie la carte d'agent A2A (Agent-to-Agent protocol)."""
+    card = {
+        "name": "OEIS Python Agent",
+        "version": "1.0.0",
+        "description": "Agent for discovering, searching, computing, and analyzing integer sequences from OEIS.",
+        "supportedInterfaces": [
+            {
+                "serviceUrl": "https://oeis.drgoulu.com/",
+                "protocol": "http"
+            }
+        ],
+        "capabilities": {
+            "tools": True,
+            "streaming": False
+        },
+        "skills": [
+            {
+                "id": "oeis-search",
+                "name": "OEIS Search",
+                "description": "Search sequences by number, terms, or keywords"
+            },
+            {
+                "id": "oeis-evaluate",
+                "name": "OEIS Sequence Evaluation",
+                "description": "Compute term n or test containment for supported sequences"
+            }
+        ]
+    }
+    return Response(
+        content=json.dumps(card, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
+
+
+@app.get("/auth.md", response_class=PlainTextResponse)
+def auth_md():
+    """Publie les métadonnées et instructions d'authentification pour agents (auth.md)."""
+    content = """# auth.md
+
+## Authentication & Access for AI Agents
+
+The OEIS Python service at `https://oeis.drgoulu.com` provides open, unauthenticated access to integer sequence data, metadata, and calculation tools.
+
+### Public Access Policy
+- **Authentication**: None required. All search, calculation, and documentation endpoints are publicly accessible.
+- **Audience**: AI Agents, web crawlers, and developers.
+- **Endpoints**:
+  - `GET /api/search?q={query}` : Search sequences by ID, terms, or keywords.
+  - `GET /api/compute/{seq_id}` : Evaluate itemf(n) or containf(x).
+  - `GET /{seq_id}` : Get HTML or Markdown (with `Accept: text/markdown`).
+- **Fair Use**: Rate limiting is minimal but agents are expected to respect `robots.txt` guidelines.
+
+### Discovery Endpoints
+- A2A Agent Card: `/.well-known/agent-card.json`
+- Model Context Protocol (MCP): `/.well-known/mcp/server-card.json`
+- API Catalog (RFC 9727): `/.well-known/api-catalog`
+- Agentic Resource Discovery (ARD): `/.well-known/ai-catalog.json`
+- Agent Skills Index: `/.well-known/agent-skills/index.json`
+"""
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Type": "text/markdown; charset=utf-8"}
+    )
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots_txt():
     """Publie /robots.txt conforme à la RFC 9309 (Robots Exclusion Protocol)."""

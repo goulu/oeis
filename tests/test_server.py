@@ -19,6 +19,8 @@ from src.server import (
     mcp_server_card,
     agent_skills_index,
     ai_catalog,
+    agent_card,
+    auth_md,
     index_page,
     SEQUENCES_DIR,
 )
@@ -76,6 +78,20 @@ class TestServerSequenceFlow(unittest.TestCase):
         data = json.loads(res.body.decode('utf-8'))
         self.assertEqual(data.get("specVersion"), "1.0")
         self.assertIn("entries", data)
+
+    def test_agent_card(self):
+        res = agent_card()
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.body.decode('utf-8'))
+        self.assertEqual(data["name"], "OEIS Python Agent")
+        self.assertIn("supportedInterfaces", data)
+
+    def test_auth_md(self):
+        res = auth_md()
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("text/markdown", res.media_type)
+        content = res.body.decode('utf-8')
+        self.assertIn("# auth.md", content)
 
     def test_link_headers_and_markdown_negotiation(self):
         # 1. HTML request on homepage has Link headers
