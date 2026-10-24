@@ -1183,9 +1183,6 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
             <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Official OEIS.org page</a>
             <a href="/edit/{sid}">&#9998; Submit implementation</a>
         </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted);">
-            Source: <code>seq/{sid}.md</code>
-        </div>
     </div>
     """
 
