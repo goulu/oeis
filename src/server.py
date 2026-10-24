@@ -455,7 +455,7 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
                 <div class="logo-icon">OEIS</div>
                 <div class="logo-text">
                     <h1>The On-Line Encyclopedia of Integer Sequences®</h1>
-                    <span>Python Sequence Platform & Collaboration</span>
+                    <span>Modern Implementation for Coders and Agents</span>
                 </div>
             </a>
             <div class="header-links">
