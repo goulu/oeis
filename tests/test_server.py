@@ -114,6 +114,24 @@ class TestServerSequenceFlow(unittest.TestCase):
         self.assertIn("text/markdown", res_seq_md.headers.get("content-type", ""))
         self.assertIn("x-markdown-tokens", res_seq_md.headers)
 
+    def test_homepage_sequences_table(self):
+        scope_html = {'type': 'http', 'headers': [(b'accept', b'text/html')]}
+        res_html = index_page(Request(scope_html))
+        self.assertEqual(res_html.status_code, 200)
+        content = res_html.body.decode('utf-8')
+        # Check welcome text is removed
+        self.assertNotIn("Welcome to the OEIS Python Clone", content)
+        self.assertNotIn("Collaborative platform for infinite integer sequences integrating the Sequence class", content)
+        # Check table columns are present
+        self.assertIn("Numéro</th>", content)
+        self.assertIn("Titre</th>", content)
+        self.assertIn("20 premiers nombres</th>", content)
+        self.assertIn("Code</th>", content)
+        # Check sequences table presence and badges
+        self.assertIn('<table class="sequences-table">', content)
+        self.assertIn('<a href="/A000045">A000045</a>', content)
+        self.assertIn('class="badge-code-s"', content)
+
     def test_on_demand_sequence_generation(self):
         sid = "A022307"
         md_file = os.path.join(SEQUENCES_DIR, f"{sid}.md")

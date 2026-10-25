@@ -8,6 +8,8 @@ Serveur Web pour le clone OEIS.
 import os
 import json
 import sqlite3
+import datetime
+import html
 import markdown
 from fastapi import FastAPI, HTTPException, Request, Form, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -340,6 +342,84 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             color: #166534;
         }}
 
+        /* Sequences Table (Homepage) */
+        .sequences-table-container {{
+            overflow-x: auto;
+            margin-top: 1rem;
+        }}
+
+        .sequences-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }}
+
+        .sequences-table th, .sequences-table td {{
+            border: 1px solid var(--border-color);
+            padding: 0.55rem 0.75rem;
+            text-align: left;
+            vertical-align: top;
+        }}
+
+        .sequences-table th {{
+            background: #f1f5f9;
+            color: var(--oeis-blue);
+            font-weight: 600;
+            white-space: nowrap;
+        }}
+
+        .sequences-table tr:hover {{
+            background-color: #f8fafc;
+        }}
+
+        .sequences-table .col-id {{
+            white-space: nowrap;
+            font-weight: 700;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }}
+
+        .sequences-table .col-id a {{
+            color: var(--primary);
+            text-decoration: none;
+        }}
+
+        .sequences-table .col-id a:hover {{
+            text-decoration: underline;
+        }}
+
+        .sequences-table .col-title {{
+            color: var(--text-main);
+            line-height: 1.4;
+        }}
+
+        .sequences-table .col-terms {{
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.82rem;
+            color: #334155;
+            background: #f8fafc;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.4;
+        }}
+
+        .sequences-table .col-code {{
+            text-align: center;
+            font-weight: 700;
+            white-space: nowrap;
+            vertical-align: middle;
+        }}
+
+        .badge-code-s {{
+            display: inline-block;
+            background: #dbeafe;
+            color: var(--oeis-blue);
+            font-weight: 700;
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            border: 1px solid #bfdbfe;
+        }}
+
         /* Interactive Runner Box */
         .interactive-box {{
             margin-top: 2rem;
@@ -572,22 +652,60 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
 
 @app.get("/", response_class=HTMLResponse)
 def index_page(request: Request = None):
-    """Page d'accueil avec moteur de recherche, Link headers (RFC 8288) et support Markdown."""
+    """Page d'accueil avec tableau des séquences, Link headers (RFC 8288) et support Markdown."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            s.id, s.name, s.terms_preview, s.created_at as s_created_at,
+            i.created_at as i_created_at, i.definition_code
+        FROM sequences s
+        LEFT JOIN implementations i ON s.current_implementation_id = i.id
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    seq_list = []
+    for r in rows:
+        sid = r["id"]
+        dates = []
+        if r["s_created_at"]:
+            dates.append(str(r["s_created_at"]))
+        if r["i_created_at"]:
+            dates.append(str(r["i_created_at"]))
+        md_file = os.path.join(SEQUENCES_DIR, f"{sid}.md")
+        if os.path.exists(md_file):
+            dates.append(datetime.datetime.fromtimestamp(os.path.getmtime(md_file)).strftime("%Y-%m-%d %H:%M:%S"))
+        last_mod = max(dates) if dates else "1970-01-01 00:00:00"
+
+        raw_terms = [t.strip() for t in (r["terms_preview"] or "").split(",") if t.strip()]
+        first_20 = ", ".join(raw_terms[:20])
+        has_code = bool(r["definition_code"] and r["definition_code"].strip())
+
+        seq_list.append({
+            "id": sid,
+            "name": r["name"] or "",
+            "terms": first_20,
+            "code": "S" if has_code else "",
+            "last_mod": last_mod,
+        })
+
+    # Ordre chronologique inverse de dernière modification (ou création)
+    seq_list.sort(key=lambda x: (x["last_mod"], x["id"]), reverse=True)
+
+    # Négociation de contenu Markdown pour agents
     if request:
         accept = request.headers.get("accept", "").lower()
         if "text/markdown" in accept:
-            md_text = (
-                "# The On-Line Encyclopedia of Integer Sequences (OEIS)\n\n"
-                "Collaborative platform for infinite integer sequences integrating the `Sequence` class with `iterf`, `itemf` and `containf` methods.\n\n"
-                "## Key Resources\n"
-                "- Direct sequence lookup: `/{Axxxxxx}` (e.g. `/A000045`)\n"
-                "- Search sequences: `/search?q={query}` (e.g. `/search?q=1,1,2,3,5,8`)\n"
-                "- Search hints: `/hints.html`\n"
-                "- API Catalog: `/.well-known/api-catalog`\n"
-                "- AI Capabilities Manifest: `/.well-known/ai-catalog.json`\n"
-                "- OpenAPI Specification: `/openapi.json`\n"
-                "- API Documentation: `/docs`\n"
-            )
+            md_lines = [
+                "# The On-Line Encyclopedia of Integer Sequences (OEIS)\n",
+                f"{len(seq_list)} sequences listed by reverse chronological order of modification/creation.\n",
+                "| Numéro | Titre | 20 premiers nombres | Code |",
+                "| :--- | :--- | :--- | :---: |",
+            ]
+            for s in seq_list:
+                md_lines.append(f"| [{s['id']}](https://oeis.drgoulu.com/{s['id']}) | {s['name']} | {s['terms']} | {s['code']} |")
+            md_text = "\n".join(md_lines)
             tokens = str(len(md_text.split()) * 4 // 3)
             return Response(
                 content=md_text,
@@ -595,43 +713,39 @@ def index_page(request: Request = None):
                 headers={"x-markdown-tokens": tokens}
             )
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT count(*) FROM sequences")
-    nb_seqs = cursor.fetchone()[0]
-
-    # Récupérer quelques suites phares
-    sample_ids = ('A000045', 'A000040', 'A000079', 'A000217', 'A000290', 'A000004')
-    cursor.execute(f"SELECT id, name, terms_preview FROM sequences WHERE id IN ({','.join(['?']*len(sample_ids))})", sample_ids)
-    samples = cursor.fetchall()
-    conn.close()
-
-    samples_html = '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.5rem;">'
-    for s in samples:
-        samples_html += f"""
-        <div style="background: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 1.2rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-            <div style="font-weight: 700; font-size: 1.1rem;"><a href="/{s['id']}" style="color: var(--primary); text-decoration: none;">{s['id']}</a></div>
-            <div style="color: #475569; font-size: 0.9rem; margin: 0.4rem 0;">{s['name']}</div>
-            <div style="font-family: monospace; font-size: 0.8rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; overflow-wrap: anywhere; word-break: break-word;">{s['terms_preview']}</div>
-        </div>
-        """
-    samples_html += '</div>'
+    rows_html = []
+    for s in seq_list:
+        code_html = '<span class="badge-code-s" title="Sequence object defined in Python">S</span>' if s["code"] == "S" else ""
+        escaped_name = html.escape(s["name"])
+        rows_html.append(f"""
+        <tr>
+            <td class="col-id"><a href="/{s['id']}">{s['id']}</a></td>
+            <td class="col-title">{escaped_name}</td>
+            <td class="col-terms">{s['terms']}</td>
+            <td class="col-code">{code_html}</td>
+        </tr>""")
 
     home_content = f"""
     <div class="sequence-card">
-        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Welcome to the OEIS Python Clone</h2>
-        <p style="color: var(--text-muted); font-size: 1rem; margin-bottom: 1.5rem;">
-            Collaborative platform for infinite integer sequences integrating the <code>Sequence</code> class with <code>iterf</code>, <code>itemf</code> and <code>containf</code> methods.
-        </p>
-
-        <div style="display: flex; gap: 2rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 1.2rem; margin-bottom: 1.5rem;">
-            <div><strong>{nb_seqs}</strong> indexed sequences</div>
-            <div><strong>100%</strong> defined with <code>Sequence</code></div>
-            <div><strong>Automatic Markdown generation</strong> & on-the-fly HTML conversion</div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h2 style="color: var(--oeis-blue); font-size: 1.3rem; font-weight: 700; margin: 0;">Sequences</h2>
+            <span style="color: var(--text-muted); font-size: 0.85rem;"><strong>{len(seq_list)}</strong> sequences &bull; Sorted by last modification / creation</span>
         </div>
-
-        <h3 style="color: var(--oeis-blue); border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem;">Featured Sequences</h3>
-        {samples_html}
+        <div class="sequences-table-container">
+            <table class="sequences-table">
+                <thead>
+                    <tr>
+                        <th style="width: 105px;">Numéro</th>
+                        <th>Titre</th>
+                        <th style="width: 42%;">20 premiers nombres</th>
+                        <th style="width: 60px; text-align: center;">Code</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {"".join(rows_html)}
+                </tbody>
+            </table>
+        </div>
     </div>
     """
     headers = {
