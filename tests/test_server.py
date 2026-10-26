@@ -123,9 +123,9 @@ class TestServerSequenceFlow(unittest.TestCase):
         self.assertNotIn("Welcome to the OEIS Python Clone", content)
         self.assertNotIn("Collaborative platform for infinite integer sequences integrating the Sequence class", content)
         # Check table columns are present
-        self.assertIn("Numéro</th>", content)
-        self.assertIn("Titre</th>", content)
-        self.assertIn("20 premiers nombres</th>", content)
+        self.assertIn("Number</th>", content)
+        self.assertIn("Title</th>", content)
+        self.assertIn("First terms</th>", content)
         self.assertIn("Code</th>", content)
         # Check sequences table presence and badges
         self.assertIn('<table class="sequences-table">', content)

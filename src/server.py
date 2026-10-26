@@ -700,7 +700,7 @@ def index_page(request: Request = None):
             md_lines = [
                 "# The On-Line Encyclopedia of Integer Sequences (OEIS)\n",
                 f"{len(seq_list)} sequences listed by reverse chronological order of modification/creation.\n",
-                "| Numéro | Titre | 20 premiers nombres | Code |",
+                "| Number | Title | First terms | Code |",
                 "| :--- | :--- | :--- | :---: |",
             ]
             for s in seq_list:
@@ -735,9 +735,9 @@ def index_page(request: Request = None):
             <table class="sequences-table">
                 <thead>
                     <tr>
-                        <th style="width: 105px;">Numéro</th>
-                        <th>Titre</th>
-                        <th style="width: 42%;">20 premiers nombres</th>
+                        <th style="width: 105px;">Number</th>
+                        <th>Title</th>
+                        <th style="width: 42%;">First terms</th>
                         <th style="width: 60px; text-align: center;">Code</th>
                     </tr>
                 </thead>
