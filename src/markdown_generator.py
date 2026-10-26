@@ -549,66 +549,33 @@ def format_sequence_markdown(data):
         md.append("Terms not computed")
     md.append("```\n")
 
-    # Section Métadonnées (METADATA - %O, %K, %A, %I)
-    md.append("### METADATA")
-    md.append(f"- **OFFSET** : `{offset_str}`")
-    md.append(f"- **KEYWORDS** : `{keywords}`")
-    md.append(f"- **AUTHOR** : {author}")
-    if identification:
-        md.append(f"- **IDENTIFICATION** : `{identification}`")
-    if data.get('submitter'):
-        md.append(f"- **CURRENT IMPLEMENTER** : @{submitter}")
+    # Section Implémentation Python Goulib / Sequence
+    md.append("### PYTHON IMPLEMENTATION")
+    if data.get('definition_code'):
+        md.append("Executable sequence implementation based on `goulib.sequence.Sequence`:\n")
+        if data.get('auxiliary_code'):
+            md.append("#### Auxiliary functions:")
+            md.append("```python")
+            md.append(data['auxiliary_code'].strip())
+            md.append("```\n")
+
+        md.append("#### Main definition:")
+        md.append("```python")
+        md.append(data['definition_code'].strip())
+        md.append("```\n")
+
+        md.append("#### Detail of provided methods:")
+        md.append("| Function | Expression | Description |")
+        md.append("| :--- | :--- | :--- |")
+        iterf_str = f"`{data.get('iterf_code')}`" if data.get('iterf_code') else "*(none / count)*"
+        itemf_str = f"`{data.get('itemf_code')}`" if data.get('itemf_code') else "*(sequential evaluation)*"
+        containf_str = f"`{data.get('containf_code')}`" if data.get('containf_code') else "*(monotonic search)*"
+        md.append(f"| **`iterf`** | {iterf_str} | Generator iterating over the infinite sequence |")
+        md.append(f"| **`itemf(n)`** | {itemf_str} | Direct computation of $n$-th term |")
+        md.append(f"| **`containf(x)`** | {containf_str} | Boolean membership test ($x \\in S$) |")
+    else:
+        md.append("*No Python implementation recorded in the local database yet.*")
     md.append("")
-
-    # Section Commentaires (COMMENTS - %C)
-    comments = data.get('comments', [])
-    if comments:
-        md.append("### COMMENTS")
-        in_block = False
-        for c in comments:
-            c_clean = c.strip()
-            if '(Start)' in c_clean:
-                md.append(f"- {c_clean}")
-                in_block = True
-            elif in_block:
-                md.append(f"  - {c_clean}")
-                if '(End)' in c_clean:
-                    in_block = False
-            else:
-                md.append(f"- {c_clean}")
-        md.append("")
-
-    # Section Exemples (EXAMPLES - %e)
-    examples = data.get('examples', [])
-    if examples:
-        md.append("### EXAMPLES")
-        for e in examples:
-            md.append(f"- {e.strip()}")
-        md.append("")
-
-    # Section Formules (FORMULA - %F)
-    formulas = data.get('formulas', [])
-    if formulas:
-        md.append("### FORMULA")
-        for f in formulas:
-            md.append(f"- {f.strip()}")
-        md.append("")
-
-    # Section Références (REFERENCES - %D)
-    references = data.get('references', [])
-    if references:
-        md.append("### REFERENCES")
-        for d in references:
-            md.append(f"- {d.strip()}")
-        md.append("")
-
-    # Section Liens (LINKS - %H)
-    links = data.get('links', [])
-    if links:
-        md.append("### LINKS")
-        for h in links:
-            md.append(f"- {format_oeis_link(h.strip())}")
-        md.append("")
 
     # Section Programmes (%p, %t, %o)
     programs = data.get('programs', {})
@@ -674,33 +641,56 @@ def format_sequence_markdown(data):
                         md.append("```")
             md.append("")
 
-    # Section Implémentation Python Goulib / Sequence
-    md.append("### PYTHON IMPLEMENTATION")
-    if data.get('definition_code'):
-        md.append("Executable sequence implementation based on `goulib.sequence.Sequence`:\n")
-        if data.get('auxiliary_code'):
-            md.append("#### Auxiliary functions:")
-            md.append("```python")
-            md.append(data['auxiliary_code'].strip())
-            md.append("```\n")
+    # Section Commentaires (COMMENTS - %C)
+    comments = data.get('comments', [])
+    if comments:
+        md.append("### COMMENTS")
+        in_block = False
+        for c in comments:
+            c_clean = c.strip()
+            if '(Start)' in c_clean:
+                md.append(f"- {c_clean}")
+                in_block = True
+            elif in_block:
+                md.append(f"  - {c_clean}")
+                if '(End)' in c_clean:
+                    in_block = False
+            else:
+                md.append(f"- {c_clean}")
+        md.append("")
 
-        md.append("#### Main definition:")
-        md.append("```python")
-        md.append(data['definition_code'].strip())
-        md.append("```\n")
+    # Section Exemples (EXAMPLES - %e)
+    examples = data.get('examples', [])
+    if examples:
+        md.append("### EXAMPLES")
+        for e in examples:
+            md.append(f"- {e.strip()}")
+        md.append("")
 
-        md.append("#### Detail of provided methods:")
-        md.append("| Function | Expression | Description |")
-        md.append("| :--- | :--- | :--- |")
-        iterf_str = f"`{data.get('iterf_code')}`" if data.get('iterf_code') else "*(none / count)*"
-        itemf_str = f"`{data.get('itemf_code')}`" if data.get('itemf_code') else "*(sequential evaluation)*"
-        containf_str = f"`{data.get('containf_code')}`" if data.get('containf_code') else "*(monotonic search)*"
-        md.append(f"| **`iterf`** | {iterf_str} | Generator iterating over the infinite sequence |")
-        md.append(f"| **`itemf(n)`** | {itemf_str} | Direct computation of $n$-th term |")
-        md.append(f"| **`containf(x)`** | {containf_str} | Boolean membership test ($x \\in S$) |")
-    else:
-        md.append("*No Python implementation recorded in the local database yet.*")
-    md.append("")
+    # Section Formules (FORMULA - %F)
+    formulas = data.get('formulas', [])
+    if formulas:
+        md.append("### FORMULA")
+        for f in formulas:
+            md.append(f"- {f.strip()}")
+        md.append("")
+
+    # Section Références (REFERENCES - %D)
+    references = data.get('references', [])
+    if references:
+        md.append("### REFERENCES")
+        for d in references:
+            md.append(f"- {d.strip()}")
+        md.append("")
+
+    # Section Liens (LINKS - %H)
+    links = data.get('links', [])
+    if links:
+        md.append("### LINKS")
+        for h in links:
+            md.append(f"- {format_oeis_link(h.strip())}")
+        md.append("")
+
 
     # Section Renvois et Cross-references (CROSSREFERENCES - %Y)
     crossrefs = data.get('crossrefs', [])
@@ -717,6 +707,17 @@ def format_sequence_markdown(data):
         for ext in extensions:
             md.append(f"- {ext.strip()}")
         md.append("")
+
+    # Section Métadonnées (METADATA - %O, %K, %A, %I)
+    md.append("### METADATA")
+    md.append(f"- **OFFSET** : `{offset_str}`")
+    md.append(f"- **KEYWORDS** : `{keywords}`")
+    md.append(f"- **AUTHOR** : {author}")
+    if identification:
+        md.append(f"- **IDENTIFICATION** : `{identification}`")
+    if data.get('submitter'):
+        md.append(f"- **CURRENT IMPLEMENTER** : @{submitter}")
+    md.append("")
 
     content = "\n".join(md)
     return localize_sequence_links(content)
