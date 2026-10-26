@@ -536,9 +536,6 @@ def format_sequence_markdown(data):
     md.append(f"# {sid}")
     md.append(f"## {name}\n")
 
-    # Barre de liens d'actions OEIS
-    md.append("> `(list)` &nbsp; `(graph)` &nbsp; `(refs)` &nbsp; `(listen)` &nbsp; `(history)` &nbsp; `(text)` &nbsp; `(edit)`\n")
-
     # Section Termes (DATA - %S, %T, %U)
     terms_list = data.get('terms', [])
     md.append("### DATA")
