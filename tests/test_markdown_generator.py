@@ -18,6 +18,8 @@ from src.markdown_generator import (
     generate_sequence_markdown,
     sync_sequence_to_db,
     read_oeis_seq_file,
+    extract_author_and_date,
+    extract_programs_from_seq_data,
 )
 
 SAMPLE_SEQ_CONTENT = """%I A000003 M0196 N0073 #95 May 07 2026 17:55:20
@@ -271,6 +273,64 @@ class TestMarkdownGenerator(unittest.TestCase):
 
             cursor.execute("SELECT n, repeat FROM seq WHERE id = 45 ORDER BY i")
             self.assertEqual(cursor.fetchall(), [(0, 1), (1, 2), (2, 1), (3, 1), (5, 1), (8, 1), (13, 1)])
+
+    def test_extract_author_and_date(self):
+        auth1, d1 = extract_author_and_date("/* _Martin Ettl_, Oct 21 2012 */")
+        self.assertEqual(auth1, "Martin Ettl")
+        self.assertEqual(d1, "Oct 21 2012")
+
+        auth2, d2 = extract_author_and_date("(* _Harvey P. Dale_, Aug 03 2014 *)")
+        self.assertEqual(auth2, "Harvey P. Dale")
+        self.assertEqual(d2, "Aug 03 2014")
+
+        auth3, d3 = extract_author_and_date("# _N. J. A. Sloane_, 1991")
+        self.assertEqual(auth3, "N. J. A. Sloane")
+        self.assertEqual(d3, "1991")
+
+    def test_extract_programs_and_db_sync(self):
+        sample = """%I A000045
+%S A000045 0, 1, 1, 2, 3, 5, 8
+%N A000045 Fibonacci
+%p A000045 with(combinat): fibonacci(n); # _Paul Barry_, Jan 15 2005
+%t A000045 Table[Fibonacci[n], {n, 0, 20}] (* _Harvey P. Dale_, Aug 03 2014 *)
+%o A000045 (Python)
+%o A000045 def a(n):
+%o A000045     return fib(n)
+%o A000045 (PARI) {a(n) = fibonacci(n)}; \\\\ _Michel Marcus_, Nov 18 2013
+"""
+        parsed = parse_oeis_seq(sample, "A000045")
+        programs = extract_programs_from_seq_data(parsed)
+        self.assertEqual(len(programs), 4)
+
+        prog_map = {p["language"]: p for p in programs}
+        self.assertIn("maple", prog_map)
+        self.assertEqual(prog_map["maple"]["author"], "Paul Barry")
+        self.assertEqual(prog_map["maple"]["code_date"], "Jan 15 2005")
+
+        self.assertIn("mathematica", prog_map)
+        self.assertEqual(prog_map["mathematica"]["author"], "Harvey P. Dale")
+        self.assertEqual(prog_map["mathematica"]["code_date"], "Aug 03 2014")
+
+        self.assertIn("python", prog_map)
+        self.assertIn("def a(n):", prog_map["python"]["code"])
+
+        self.assertIn("pari", prog_map)
+        self.assertEqual(prog_map["pari"]["author"], "Michel Marcus")
+        self.assertEqual(prog_map["pari"]["code_date"], "Nov 18 2013")
+
+        # Sync to database and verify implementations table
+        conn = sqlite3.connect(":memory:")
+        sync_sequence_to_db(parsed, conn=conn)
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT language, author, code_date, definition_code FROM implementations WHERE sequence_id = 'A000045' ORDER BY id")
+        rows = cursor.fetchall()
+        self.assertEqual(len(rows), 4)
+
+        db_langs = [r[0] for r in rows]
+        self.assertEqual(db_langs, ["maple", "mathematica", "python", "pari"])
+        self.assertEqual(rows[0][1], "Paul Barry")
+        self.assertEqual(rows[0][2], "Jan 15 2005")
 
 
 if __name__ == "__main__":

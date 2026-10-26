@@ -6,22 +6,27 @@ Serveur Web pour le clone OEIS.
 """
 
 import os
+import re
 import json
 import sqlite3
 import datetime
 import html
 import markdown
 from fastapi import FastAPI, HTTPException, Request, Form, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import sys
+import subprocess
+import pygments
+from pygments.lexers import get_lexer_by_name, TextLexer
+from pygments.formatters import HtmlFormatter
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR
+from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR, ensure_db_schema
 from search_engine import OEISSearchEngine
 from i18n import (
     resolve_language,
@@ -44,6 +49,7 @@ search_engine = OEISSearchEngine(DB_PATH)
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    ensure_db_schema(conn)
     return conn
 
 
@@ -329,12 +335,12 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             background: var(--code-bg);
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            padding: 1rem;
+            padding: 0.85rem 1rem;
             white-space: pre-wrap;
             word-wrap: break-word;
             overflow-wrap: anywhere;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             line-height: 1.45;
             margin: 0.8rem 0;
         }}
@@ -343,6 +349,7 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
+            font-family: inherit;
         }}
 
         .markdown-body code {{
@@ -351,6 +358,93 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             padding: 0.15rem 0.3rem;
             border-radius: 4px;
             font-size: 0.88rem;
+        }}
+
+        /* Pygments Syntax Highlighting pour Mathematica, Maple, Python, PARI, etc. */
+        .codehilite {{
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin: 0.8rem 0;
+            overflow-x: auto;
+        }}
+        .codehilite pre {{
+            background: transparent !important;
+            padding: 0.85rem 1rem !important;
+            margin: 0 !important;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+            font-size: 0.88rem !important;
+            line-height: 1.45 !important;
+            color: #1e293b;
+        }}
+        .codehilite .k, .codehilite .kd, .codehilite .kn, .codehilite .kp, .codehilite .kr {{ color: #0284c7; font-weight: 700; }}
+        .codehilite .kt {{ color: #0284c7; }}
+        .codehilite .na, .codehilite .nf, .codehilite .fm {{ color: #2563eb; font-weight: 700; }}
+        .codehilite .nc, .codehilite .nn {{ color: #0f766e; font-weight: 700; }}
+        .codehilite .s, .codehilite .sa, .codehilite .sb, .codehilite .sc, .codehilite .dl,
+        .codehilite .sd, .codehilite .s2, .codehilite .se, .codehilite .sh, .codehilite .si,
+        .codehilite .sx, .codehilite .sr, .codehilite .s1, .codehilite .ss {{ color: #15803d; }}
+        .codehilite .m, .codehilite .mb, .codehilite .mf, .codehilite .mh, .codehilite .mi,
+        .codehilite .il, .codehilite .mo {{ color: #b45309; }}
+        .codehilite .o, .codehilite .ow {{ color: #334155; font-weight: 600; }}
+        .codehilite .c, .codehilite .ch, .codehilite .cm, .codehilite .cp, .codehilite .cpf,
+        .codehilite .c1, .codehilite .cs {{ color: #64748b; font-style: italic; }}
+        .codehilite .nb, .codehilite .bp {{ color: #0369a1; }}
+        .codehilite .p {{ color: #475569; }}
+
+        /* Code Runner Buttons & Output */
+        .code-runner {{
+            margin: -0.4rem 0 1.2rem 0;
+        }}
+        .runner-controls {{
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 0.35rem;
+            margin-bottom: 0.4rem;
+        }}
+        .btn-run {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: #0284c7;
+            color: #ffffff;
+            border: none;
+            padding: 0.35rem 0.9rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+        }}
+        .btn-run:hover {{
+            background: #0369a1;
+        }}
+        .btn-run:active {{
+            transform: scale(0.98);
+        }}
+        .btn-run:disabled {{
+            background: #94a3b8;
+            cursor: not-allowed;
+        }}
+        .run-status {{
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }}
+        .run-output {{
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-top: 0.5rem;
+            border-left: 3px solid #0284c7;
+            max-height: 320px;
+            overflow-y: auto;
         }}
 
         .markdown-body table {{
@@ -665,6 +759,47 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             }}
         }} catch(e) {{
             out.innerText = '{t("network_error", lang)}' + e.message;
+        }}
+    }}
+
+    async function runSnippet(btn) {{
+        const runner = btn.closest('.code-runner');
+        if (!runner) return;
+        const code = runner.dataset.code || '';
+        const output = runner.querySelector('.run-output');
+        const status = runner.querySelector('.run-status');
+
+        btn.disabled = true;
+        if (status) status.innerText = '{t("run_running", lang)}';
+        if (output) output.style.display = 'none';
+
+        try {{
+            const res = await fetch('/api/run_code', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{code: code}})
+            }});
+            const data = await res.json();
+            if (output) {{
+                output.style.display = 'block';
+                if (data.status === 'success') {{
+                    output.style.color = '#f8fafc';
+                    output.innerText = data.output || '{t("run_no_output", lang)}';
+                }} else {{
+                    output.style.color = '#f87171';
+                    output.innerText = (data.error || data.output || 'Execution error');
+                }}
+            }}
+            if (status) status.innerText = '';
+        }} catch(e) {{
+            if (output) {{
+                output.style.display = 'block';
+                output.style.color = '#f87171';
+                output.innerText = '{t("network_error", lang)}' + e.message;
+            }}
+            if (status) status.innerText = '';
+        }} finally {{
+            btn.disabled = false;
         }}
     }}
 
@@ -1236,6 +1371,175 @@ def raw_markdown(seq_id: str):
         return f.read()
 
 
+def highlight_code_block(code: str, lang: str) -> str:
+    """Colorise un bloc de code avec Pygments (supporte Maple, Mathematica, Python, etc.)."""
+    lang_clean = lang.strip().lower() if lang else 'text'
+    alias_map = {
+        'mma': 'mathematica',
+        'wolfram': 'mathematica',
+        'pari/gp': 'pari',
+        'gp': 'pari',
+        'sage': 'sagemath',
+        'py': 'python',
+    }
+    lang_clean = alias_map.get(lang_clean, lang_clean)
+    try:
+        lexer = get_lexer_by_name(lang_clean, stripall=True)
+    except Exception:
+        lexer = TextLexer()
+    formatter = HtmlFormatter(cssclass='codehilite', nowrap=False)
+    return pygments.highlight(code, lexer, formatter)
+
+
+def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -> str:
+    """
+    Convertit le Markdown d'une séquence en HTML avec :
+    1. Coloration syntaxique complète via Pygments (supportant Mathematica, Maple, Python, etc.)
+    2. Bouton 'Run' sous chaque bloc de code exécutable (Python)
+    3. Console d'évaluation en direct 'Live Sequence Evaluation Console' placée sous le bloc Sequence(...)
+    """
+    has_sequence_widget = False
+
+    def repl_fenced(m):
+        nonlocal has_sequence_widget
+        code_lang = m.group(1).strip().lower()
+        raw_code = m.group(2)
+
+        if code_lang == 'text':
+            esc = html.escape(raw_code.strip())
+            return f'\n\n<div class="codehilite"><pre><code>{esc}</code></pre></div>\n\n'
+
+        highlighted = highlight_code_block(raw_code.strip(), code_lang)
+        is_python = code_lang in ('python', 'py')
+        has_sequence = is_python and 'Sequence(' in raw_code
+
+        if has_sequence:
+            has_sequence_widget = True
+            console_html = f"""
+<div class="interactive-box">
+    <h4>&#9881; {t("eval_console_title", lang)}</h4>
+    <p style="font-size: 0.85rem; color: var(--text-muted);">
+        {t("eval_console_desc", lang)}
+    </p>
+    <div class="test-controls">
+        <div class="test-input-group">
+            <label for="itemf-n">{t("compute_term_n", lang)}</label>
+            <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
+            <button type="button" onclick="testItemf('{sid}')" class="test-button">{t("compute_itemf", lang)}</button>
+        </div>
+        <div class="test-input-group">
+            <label for="containf-x">{t("test_value_x", lang)}</label>
+            <input type="number" id="containf-x" value="55" class="test-input">
+            <button type="button" onclick="testContainf('{sid}')" class="test-button">{t("test_containf", lang)}</button>
+        </div>
+    </div>
+    <div id="test-result" class="test-output">{t("eval_result_ready", lang)}</div>
+</div>
+"""
+            return f'\n\n{highlighted}\n{console_html}\n\n'
+        elif is_python:
+            esc_code = html.escape(raw_code.strip())
+            runner_html = f"""
+<div class="code-runner" data-code="{esc_code}">
+    <div class="runner-controls">
+        <button type="button" class="btn-run" onclick="runSnippet(this)">
+            &#9654; {t("run_button", lang)}
+        </button>
+        <span class="run-status"></span>
+    </div>
+    <div class="run-output" style="display: none;"></div>
+</div>
+"""
+            return f'\n\n{highlighted}\n{runner_html}\n\n'
+        else:
+            return f'\n\n{highlighted}\n\n'
+
+    processed_md = re.sub(r'```([a-zA-Z0-9_\-+]+)\n(.*?)```', repl_fenced, md_text, flags=re.DOTALL)
+    html_body = markdown.markdown(
+        processed_md,
+        extensions=[
+            'markdown.extensions.extra',
+            'markdown.extensions.tables',
+            'markdown.extensions.toc'
+        ]
+    )
+
+    if not has_sequence_widget:
+        try:
+            import oeis
+            if sid in oeis.oeis:
+                fallback_console = f"""
+<div class="interactive-box">
+    <h4>&#9881; {t("eval_console_title", lang)}</h4>
+    <p style="font-size: 0.85rem; color: var(--text-muted);">
+        {t("eval_console_desc", lang)}
+    </p>
+    <div class="test-controls">
+        <div class="test-input-group">
+            <label for="itemf-n">{t("compute_term_n", lang)}</label>
+            <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
+            <button type="button" onclick="testItemf('{sid}')" class="test-button">{t("compute_itemf", lang)}</button>
+        </div>
+        <div class="test-input-group">
+            <label for="containf-x">{t("test_value_x", lang)}</label>
+            <input type="number" id="containf-x" value="55" class="test-input">
+            <button type="button" onclick="testContainf('{sid}')" class="test-button">{t("test_containf", lang)}</button>
+        </div>
+    </div>
+    <div id="test-result" class="test-output">{t("eval_result_ready", lang)}</div>
+</div>
+"""
+                html_body += "\n" + fallback_console
+        except Exception:
+            pass
+
+    return html_body
+
+
+@app.post("/api/run_code")
+async def api_run_code(request: Request):
+    """
+    Exécute un bloc de code Python dans un sous-processus isolé
+    avec timeout et capture de la sortie standard.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "Invalid JSON body"})
+
+    code = data.get("code", "")
+    if not code or not code.strip():
+        return JSONResponse(status_code=400, content={"status": "error", "error": "No code provided"})
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = SRC_DIR + ":" + env.get("PYTHONPATH", "")
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+            cwd=ROOT_DIR
+        )
+        output = proc.stdout or ""
+        if proc.stderr:
+            if output:
+                output += "\n--- stderr ---\n" + proc.stderr
+            else:
+                output = proc.stderr
+        return {
+            "status": "success" if proc.returncode == 0 else "error",
+            "output": output,
+            "returncode": proc.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "error": "Execution timed out (5s limit)."}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @app.get("/api/sequence/{seq_id}/eval")
 def api_eval_sequence(seq_id: str, itemf_n: int = None, containf_x: int = None):
     """
@@ -1290,12 +1594,13 @@ def api_update_sequence(
 
     # 2. Insertion d'une nouvelle implémentation
     if definition_code:
+        today_str = datetime.date.today().strftime('%Y-%m-%d')
         cursor.execute("""
             INSERT INTO implementations (
-                sequence_id, user_id, status, definition_code,
+                sequence_id, user_id, status, language, author, code_date, definition_code,
                 iterf_code, itemf_code, containf_code, description, test_status
-            ) VALUES (?, 1, 'approved', ?, ?, ?, ?, ?, 'passed')
-        """, (sid, definition_code, iterf_code, itemf_code, containf_code, name or ''))
+            ) VALUES (?, 1, 'approved', 'python', 'User', ?, ?, ?, ?, ?, ?, 'passed')
+        """, (sid, today_str, definition_code, iterf_code, itemf_code, containf_code, name or ''))
         new_impl_id = cursor.lastrowid
         cursor.execute("UPDATE sequences SET current_implementation_id = ? WHERE id = ?", (new_impl_id, sid))
 
@@ -1440,18 +1745,10 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False, la
             }
         )
 
-    # Conversion à la volée du Markdown en HTML
-    html_body = markdown.markdown(
-        md_text,
-        extensions=[
-            'markdown.extensions.extra',
-            'markdown.extensions.tables',
-            'markdown.extensions.fenced_code',
-            'markdown.extensions.toc'
-        ]
-    )
+    # Conversion à la volée du Markdown en HTML avec coloration syntaxique et widgets d'exécution
+    html_body = render_sequence_markdown_to_html(md_text, sid, lang)
 
-    # Barre d'actions & Widget interactif avec i18n
+    # Barre d'actions avec i18n
     actions_bar = f"""
     <div class="sequence-actions">
         <div class="btn-group">
@@ -1462,33 +1759,10 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False, la
     </div>
     """
 
-    interactive_box = f"""
-    <div class="interactive-box">
-        <h4>&#9881; {t("eval_console_title", lang)}</h4>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">
-            {t("eval_console_desc", lang)}
-        </p>
-        <div class="test-controls">
-            <div class="test-input-group">
-                <label for="itemf-n">{t("compute_term_n", lang)}</label>
-                <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
-                <button type="button" onclick="testItemf('{sid}')" class="test-button">{t("compute_itemf", lang)}</button>
-            </div>
-            <div class="test-input-group">
-                <label for="containf-x">{t("test_value_x", lang)}</label>
-                <input type="number" id="containf-x" value="55" class="test-input">
-                <button type="button" onclick="testContainf('{sid}')" class="test-button">{t("test_containf", lang)}</button>
-            </div>
-        </div>
-        <div id="test-result" class="test-output">{t("eval_result_ready", lang)}</div>
-    </div>
-    """
-
     full_content = f"""
     {actions_bar}
     <div class="sequence-card markdown-body">
         {html_body}
-        {interactive_box}
     </div>
     """
 

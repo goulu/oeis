@@ -24,6 +24,9 @@ from src.server import (
     index_page,
     hints_page,
     search_page,
+    render_sequence_markdown_to_html,
+    highlight_code_block,
+    api_run_code,
     SEQUENCES_DIR,
 )
 from src.i18n import resolve_language, t, build_language_switch_url
@@ -256,6 +259,56 @@ class TestServerSequenceFlow(unittest.TestCase):
             build_language_switch_url("https://oeis.org/?language=spanish", "english"),
             "https://oeis.org/?language=english"
         )
+
+    def test_render_sequence_markdown_code_blocks(self):
+        # 1. Maple code block highlighted with pygments
+        maple_md = "```maple\nwith(combinat): fibonacci(n);\n```"
+        html_maple = render_sequence_markdown_to_html(maple_md, "A999999", "en")
+        self.assertIn('class="codehilite"', html_maple)
+        self.assertNotIn('class="btn-run"', html_maple)
+
+        # 2. Mathematica code block highlighted with pygments
+        math_md = "```mathematica\nTable[Fibonacci[n], {n, 0, 20}]\n```"
+        html_math = render_sequence_markdown_to_html(math_md, "A999999", "en")
+        self.assertIn('class="codehilite"', html_math)
+        self.assertNotIn('class="btn-run"', html_math)
+
+        # 3. Standard Python snippet receives Run button
+        py_normal_md = "```python\ndef a(n):\n    return n * (n + 1) // 2\nprint([a(i) for i in range(10)])\n```"
+        html_py_normal = render_sequence_markdown_to_html(py_normal_md, "A000096", "en")
+        self.assertIn('class="code-runner"', html_py_normal)
+        self.assertIn('class="btn-run"', html_py_normal)
+        self.assertNotIn('interactive-box', html_py_normal)
+
+        # 4. Sequence(...) Python snippet receives Live Sequence Evaluation Console widget instead of Run button
+        py_seq_md = "```python\nA000045 = Sequence(\n    name='Fibonacci',\n    iterf=lambda: ...,\n)\n```"
+        html_py_seq = render_sequence_markdown_to_html(py_seq_md, "A000045", "en")
+        self.assertIn('class="interactive-box"', html_py_seq)
+        self.assertNotIn('class="btn-run"', html_py_seq)
+
+    def test_api_run_code(self):
+        import asyncio
+
+        async def run_snippet(code_str):
+            async def dummy_receive():
+                return {
+                    "type": "http.request",
+                    "body": json.dumps({"code": code_str}).encode("utf-8"),
+                }
+            req = Request({"type": "http", "method": "POST"}, receive=dummy_receive)
+            resp = await api_run_code(req)
+            if isinstance(resp, dict):
+                return resp
+            return json.loads(resp.body.decode("utf-8"))
+
+        # Valid execution
+        res = asyncio.run(run_snippet("print('OEIS_TEST_OUTPUT_' + str(6 * 7))"))
+        self.assertEqual(res["status"], "success")
+        self.assertIn("OEIS_TEST_OUTPUT_42", res["output"])
+
+        # Execution with error
+        res_err = asyncio.run(run_snippet("raise ValueError('SampleError')"))
+        self.assertIn("ValueError: SampleError", res_err["output"])
 
 
 if __name__ == "__main__":

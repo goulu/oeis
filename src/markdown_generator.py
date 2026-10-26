@@ -307,6 +307,199 @@ def read_oeis_seq_file(file_path_or_content: str, sid: str = "", conn=None) -> d
     return data
 
 
+def ensure_db_schema(conn) -> None:
+    """Vérifie et met à jour le schéma SQLite si des tables ou colonnes manquent."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sequences'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sequences (
+                    id VARCHAR(7) PRIMARY KEY,
+                    name TEXT,
+                    offset_val INTEGER,
+                    terms_preview TEXT,
+                    keywords TEXT,
+                    author TEXT,
+                    current_implementation_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='seq'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS seq (
+                    id INTEGER NOT NULL,
+                    i INTEGER NOT NULL,
+                    n INTEGER NOT NULL,
+                    repeat INTEGER NOT NULL,
+                    PRIMARY KEY(id, i, n)
+                )
+            """)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ngram_index'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ngram_index (
+                    ngram_hash INTEGER NOT NULL,
+                    sequence_id VARCHAR(7) NOT NULL,
+                    offset_pos INTEGER NOT NULL,
+                    PRIMARY KEY(ngram_hash, sequence_id, offset_pos)
+                )
+            """)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='implementations'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS implementations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sequence_id VARCHAR(7) NOT NULL,
+                    user_id INTEGER DEFAULT 1,
+                    status VARCHAR(20) DEFAULT 'approved',
+                    language VARCHAR(50) DEFAULT 'python',
+                    author VARCHAR(150),
+                    code_date VARCHAR(50),
+                    definition_code TEXT NOT NULL,
+                    iterf_code TEXT,
+                    itemf_code TEXT,
+                    containf_code TEXT,
+                    auxiliary_code TEXT,
+                    description TEXT,
+                    test_status VARCHAR(20) DEFAULT 'untested',
+                    test_logs TEXT,
+                    terms_verified_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        cursor.execute("PRAGMA table_info(implementations)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if cols:
+            if "language" not in cols:
+                cursor.execute("ALTER TABLE implementations ADD COLUMN language VARCHAR(50) DEFAULT 'python'")
+            if "author" not in cols:
+                cursor.execute("ALTER TABLE implementations ADD COLUMN author VARCHAR(150)")
+            if "code_date" not in cols:
+                cursor.execute("ALTER TABLE implementations ADD COLUMN code_date VARCHAR(50)")
+        conn.commit()
+    except Exception as e:
+        logging.warning("Erreur ensure_db_schema: %s", e)
+
+
+def extract_author_and_date(code_text: str):
+    """
+    Extrait l'auteur et la date mentionnés dans les commentaires d'un bloc de code OEIS.
+    Exemples :
+    - /* _Martin Ettl_, Oct 21 2012 */ -> ('Martin Ettl', 'Oct 21 2012')
+    - (* _Harvey P. Dale_, Aug 03 2014 *) -> ('Harvey P. Dale', 'Aug 03 2014')
+    - # _N. J. A. Sloane_, 1991 -> ('N. J. A. Sloane', '1991')
+    """
+    author = None
+    date_str = None
+    author_match = re.search(r'_(?:From\s+)?([A-Za-z\.\s\-’\'\(\)]+?)_', code_text)
+    if author_match:
+        author = author_match.group(1).strip()
+        if author.lower().startswith('from '):
+            author = author[5:].strip()
+
+    date_match = re.search(
+        r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?'
+        r'(?:\s+\d{1,2}(?:st|nd|rd|th)?)?(?:,)?\s+\d{4}\b',
+        code_text,
+        re.IGNORECASE
+    )
+    if date_match:
+        date_str = date_match.group(0).strip()
+    else:
+        year_match = re.search(r'\b(19\d{2}|20\d{2})\b', code_text)
+        if year_match:
+            date_str = year_match.group(1).strip()
+
+    return author, date_str
+
+
+def extract_programs_from_seq_data(seq_data: dict) -> list[dict]:
+    """
+    Extrait tous les programmes depuis seq_data['programs'] (Maple, Mathematica, autres).
+    Chaque élément est un dictionnaire :
+    {'language': str, 'code': str, 'author': str | None, 'code_date': str | None}
+    """
+    programs_dict = seq_data.get('programs', {})
+    results = []
+
+    # 1. Maple (%p)
+    maple_lines = programs_dict.get('maple', [])
+    if maple_lines:
+        blocks = split_by_alternative(maple_lines)
+        for b in blocks:
+            code_text = '\n'.join(b).strip('\r\n')
+            if code_text.strip():
+                author, code_date = extract_author_and_date(code_text)
+                results.append({
+                    'language': 'maple',
+                    'code': code_text,
+                    'author': author or seq_data.get('author'),
+                    'code_date': code_date
+                })
+
+    # 2. Mathematica (%t)
+    math_lines = programs_dict.get('mathematica', [])
+    if math_lines:
+        blocks = split_by_alternative(math_lines)
+        for b in blocks:
+            code_text = '\n'.join(b).strip('\r\n')
+            if code_text.strip():
+                author, code_date = extract_author_and_date(code_text)
+                results.append({
+                    'language': 'mathematica',
+                    'code': code_text,
+                    'author': author or seq_data.get('author'),
+                    'code_date': code_date
+                })
+
+    # 3. Autres langages (%o)
+    other_lines = programs_dict.get('other', [])
+    if other_lines:
+        programs_list = []
+        current_lang = None
+        current_lines = []
+        lang_header_regex = re.compile(
+            r'^\(([A-Z][a-zA-Z0-9#+/\.]{0,20}(?: [A-Za-z0-9#+/\.]{1,15})?)\)(?![a-zA-Z0-9_\.\[])\s*(.*)',
+            re.DOTALL
+        )
+
+        for raw_line in other_lines:
+            clean_stripped = raw_line.strip()
+            match_lang = lang_header_regex.match(clean_stripped)
+            if match_lang:
+                if current_lang is not None or current_lines:
+                    programs_list.append((current_lang or "text", current_lines))
+                current_lang = match_lang.group(1).strip()
+                code_rest = match_lang.group(2)
+                current_lines = [code_rest] if code_rest.strip() else []
+            else:
+                if current_lang is None:
+                    current_lang = "text"
+                current_lines.append(raw_line)
+
+        if current_lang is not None or current_lines:
+            programs_list.append((current_lang or "text", current_lines))
+
+        for lang_name, lines in programs_list:
+            norm_lang = normalize_code_lang(lang_name)
+            sub_blocks = split_by_alternative(lines)
+            for b in sub_blocks:
+                code_text = '\n'.join(b).strip('\r\n')
+                if code_text.strip():
+                    author, code_date = extract_author_and_date(code_text)
+                    results.append({
+                        'language': norm_lang,
+                        'code': code_text,
+                        'author': author or seq_data.get('author'),
+                        'code_date': code_date
+                    })
+
+    return results
+
+
 def sync_sequence_to_db(seq_data: dict, conn=None) -> None:
     """
     Enregistre ou met à jour les informations et les DATA d'une séquence dans SQLite :
@@ -314,6 +507,7 @@ def sync_sequence_to_db(seq_data: dict, conn=None) -> None:
     - Table 'seq' (termes numériques bruts avec compression RLE id, i, n, repeat)
     - Table 'ngram_index' (index inversé de 3-grams pour la recherche instantanée)
     - Table 'sequences_fts' (index plein texte FTS5)
+    - Table 'implementations' (programmes Maple, Mathematica, Python, etc.)
     """
     if not seq_data or not seq_data.get('id'):
         return
@@ -331,6 +525,7 @@ def sync_sequence_to_db(seq_data: dict, conn=None) -> None:
             return
 
     try:
+        ensure_db_schema(conn)
         cursor = conn.cursor()
         sid = normalize_seq_id(seq_data['id'])
         name = seq_data.get('name', '')
@@ -405,6 +600,32 @@ def sync_sequence_to_db(seq_data: dict, conn=None) -> None:
             """, (sid, name, keywords, author))
         except Exception:
             pass
+
+        # 6. Insertion / mise à jour des programmes extraits du .seq dans implementations
+        programs_list = extract_programs_from_seq_data(seq_data)
+        for prog in programs_list:
+            code_str = prog['code']
+            p_lang = prog['language']
+            p_author = prog.get('author')
+            p_date = prog.get('code_date')
+
+            cursor.execute("""
+                SELECT id FROM implementations 
+                WHERE sequence_id = ? AND definition_code = ?
+            """, (sid, code_str))
+            row_impl = cursor.fetchone()
+            if row_impl:
+                cursor.execute("""
+                    UPDATE implementations 
+                    SET language = ?, author = COALESCE(author, ?), code_date = COALESCE(code_date, ?)
+                    WHERE id = ?
+                """, (p_lang, p_author, p_date, row_impl[0]))
+            else:
+                cursor.execute("""
+                    INSERT INTO implementations (
+                        sequence_id, user_id, status, language, author, code_date, definition_code, description, test_status
+                    ) VALUES (?, 1, 'approved', ?, ?, ?, ?, ?, 'untested')
+                """, (sid, p_lang, p_author, p_date, code_str, f"{p_lang.capitalize()} program from .seq"))
 
         conn.commit()
     except Exception as e:

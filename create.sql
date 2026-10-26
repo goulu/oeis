@@ -28,9 +28,12 @@ CREATE TABLE IF NOT EXISTS sequences (
 CREATE TABLE IF NOT EXISTS implementations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sequence_id VARCHAR(7) NOT NULL,
-    user_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL DEFAULT 1,
     status VARCHAR(20) DEFAULT 'approved', -- 'draft', 'submitted', 'approved', 'rejected'
-    definition_code TEXT NOT NULL,         -- Code Python complet de déclaration (ex: Sequence(...))
+    language VARCHAR(50) DEFAULT 'python', -- 'python', 'maple', 'mathematica', 'pari', etc.
+    author VARCHAR(150),
+    code_date VARCHAR(50),
+    definition_code TEXT NOT NULL,         -- Code complet du programme
     iterf_code TEXT,                      -- Code source ou expression de iterf
     itemf_code TEXT,                      -- Code source ou expression de itemf
     containf_code TEXT,                   -- Code source ou expression de containf

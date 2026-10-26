@@ -44,5 +44,8 @@
   "lang_en": "English",
   "lang_fr": "Français",
   "lang_de": "Deutsch",
-  "lang_es": "Español"
+  "lang_es": "Español",
+  "run_button": "Ejecutar",
+  "run_running": "Ejecutando...",
+  "run_no_output": "Código ejecutado con éxito (sin salida)."
 }

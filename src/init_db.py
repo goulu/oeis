@@ -18,6 +18,7 @@ ROOT_DIR = os.path.dirname(SRC_DIR) if os.path.exists(os.path.join(os.path.dirna
 DB_PATH = os.path.join(ROOT_DIR, 'oeis.db')
 SQL_PATH = os.path.join(ROOT_DIR, 'create.sql')
 OEIS_PY_PATH = os.path.join(SRC_DIR, 'oeis.py')
+from markdown_generator import ensure_db_schema
 
 
 
@@ -142,6 +143,7 @@ def init_database():
     with open(SQL_PATH, 'r', encoding='utf-8') as f:
         schema_sql = f.read()
     cursor.executescript(schema_sql)
+    ensure_db_schema(conn)
 
     # 2. Création de l'utilisateur 'goulu'
     cursor.execute("SELECT id FROM users WHERE username = 'goulu'")
@@ -209,11 +211,11 @@ def init_database():
         cursor.execute(
             """
             INSERT INTO implementations (
-                sequence_id, user_id, status, definition_code,
+                sequence_id, user_id, status, language, author, code_date, definition_code,
                 iterf_code, itemf_code, containf_code, auxiliary_code,
                 description, test_status, terms_verified_count
             )
-            VALUES (?, ?, 'approved', ?, ?, ?, ?, ?, ?, 'passed', ?)
+            VALUES (?, ?, 'approved', 'python', 'Philippe Guglielmetti', '2015', ?, ?, ?, ?, ?, ?, 'passed', ?)
         """,
             (
                 sid,
