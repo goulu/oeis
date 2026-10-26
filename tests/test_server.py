@@ -22,8 +22,11 @@ from src.server import (
     agent_card,
     auth_md,
     index_page,
+    hints_page,
+    search_page,
     SEQUENCES_DIR,
 )
+from src.i18n import resolve_language, t, build_language_switch_url
 
 
 class TestServerSequenceFlow(unittest.TestCase):
@@ -164,6 +167,95 @@ class TestServerSequenceFlow(unittest.TestCase):
         self.assertNotIn('<div class="please-wait-card">', content_served)
         self.assertIn("DATA", content_served)
         self.assertIn(sid, content_served)
+
+    def test_i18n_language_resolution_and_rendering(self):
+        # 1. URL parameter override for Spanish (full name and 2-letter code)
+        res_es = index_page(language="spanish")
+        content_es = res_es.body.decode('utf-8')
+        self.assertIn('lang="es"', content_es)
+        self.assertIn("Número</th>", content_es)
+        self.assertIn("Título</th>", content_es)
+        self.assertIn("Primeros términos</th>", content_es)
+        self.assertIn("Código</th>", content_es)
+        self.assertIn("Buscar", content_es)
+
+        # 2. URL parameter override for French
+        res_fr = index_page(language="french")
+        content_fr = res_fr.body.decode('utf-8')
+        self.assertIn('lang="fr"', content_fr)
+        self.assertIn("Numéro</th>", content_fr)
+        self.assertIn("Titre</th>", content_fr)
+        self.assertIn("Premiers termes</th>", content_fr)
+        self.assertIn("Code</th>", content_fr)
+        self.assertIn("Rechercher", content_fr)
+
+        # 3. URL parameter override for German
+        res_de = index_page(language="german")
+        content_de = res_de.body.decode('utf-8')
+        self.assertIn('lang="de"', content_de)
+        self.assertIn("Nummer</th>", content_de)
+        self.assertIn("Titel</th>", content_de)
+        self.assertIn("Erste Terme</th>", content_de)
+        self.assertIn("Code</th>", content_de)
+        self.assertIn("Suchen", content_de)
+
+        # 4. Accept-Language header fallback when no URL parameter is provided
+        scope_browser_fr = {
+            'type': 'http',
+            'path': '/',
+            'headers': [(b'accept-language', b'fr-CH,fr;q=0.9,en;q=0.8')],
+            'query_string': b'',
+        }
+        res_browser_fr = index_page(Request(scope_browser_fr))
+        content_browser_fr = res_browser_fr.body.decode('utf-8')
+        self.assertIn('lang="fr"', content_browser_fr)
+        self.assertIn("Numéro</th>", content_browser_fr)
+
+        scope_browser_de = {
+            'type': 'http',
+            'path': '/',
+            'headers': [(b'accept-language', b'de-DE,de;q=0.9,en;q=0.8')],
+            'query_string': b'',
+        }
+        res_browser_de = index_page(Request(scope_browser_de))
+        content_browser_de = res_browser_de.body.decode('utf-8')
+        self.assertIn('lang="de"', content_browser_de)
+        self.assertIn("Nummer</th>", content_browser_de)
+
+        # 5. Fallback to English when unsupported language or no header
+        scope_browser_ja = {
+            'type': 'http',
+            'path': '/',
+            'headers': [(b'accept-language', b'ja-JP,ja;q=0.9')],
+            'query_string': b'',
+        }
+        res_browser_ja = index_page(Request(scope_browser_ja))
+        content_browser_ja = res_browser_ja.body.decode('utf-8')
+        self.assertIn('lang="en"', content_browser_ja)
+        self.assertIn("Number</th>", content_browser_ja)
+
+        # 6. Hints page i18n
+        res_hints_fr = hints_page(language="french")
+        content_hints_fr = res_hints_fr.body.decode('utf-8')
+        self.assertIn("Aide et syntaxe de recherche", content_hints_fr)
+
+        res_hints_es = hints_page(language="spanish")
+        content_hints_es = res_hints_es.body.decode('utf-8')
+        self.assertIn("Consejos y sintaxis de búsqueda", content_hints_es)
+
+        res_hints_de = hints_page(language="german")
+        content_hints_de = res_hints_de.body.decode('utf-8')
+        self.assertIn("Suchhinweise und Syntax", content_hints_de)
+
+        # 7. Language switch URL builder
+        self.assertEqual(
+            build_language_switch_url("https://oeis.org/", "spanish"),
+            "https://oeis.org/?language=spanish"
+        )
+        self.assertEqual(
+            build_language_switch_url("https://oeis.org/?language=spanish", "english"),
+            "https://oeis.org/?language=english"
+        )
 
 
 if __name__ == "__main__":

@@ -23,6 +23,13 @@ if SRC_DIR not in sys.path:
 
 from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR
 from search_engine import OEISSearchEngine
+from i18n import (
+    resolve_language,
+    t,
+    LANGUAGE_NAMES,
+    LANGUAGE_URL_PARAM,
+    build_language_switch_url,
+)
 
 app = FastAPI(title="OEIS Python Clone", version="1.0.0")
 
@@ -40,14 +47,32 @@ def get_db():
     return conn
 
 
-def render_page(title: str, content_html: str, query: str = "", seq_id: str = "") -> str:
-    """Génère le gabarit HTML complet avec le design moderne inspiré d'OEIS."""
+def render_page(title: str, content_html: str, query: str = "", seq_id: str = "", lang: str = "en", request: Request = None) -> str:
+    """Génère le gabarit HTML complet avec le design moderne inspiré d'OEIS et support multilingue."""
+    if request is not None and lang == "en":
+        lang = resolve_language(request)
+
+    try:
+        current_url = str(request.url) if request else "/"
+    except Exception:
+        current_url = "/"
+    lang_links = []
+    for code in ("en", "fr", "de", "es"):
+        is_active = " active" if code == lang else ""
+        href = build_language_switch_url(current_url, code)
+        lang_links.append(f'<a href="{href}" class="lang-link{is_active}">{LANGUAGE_NAMES[code]}</a>')
+    lang_selector_html = f'<div class="lang-selector">{"".join(lang_links)}</div>'
+
+    lang_hidden = f'<input type="hidden" name="language" value="{LANGUAGE_URL_PARAM.get(lang, lang)}">' if lang != "en" else ""
+    hints_url = f"/hints.html?language={LANGUAGE_URL_PARAM.get(lang, lang)}" if lang != "en" else "/hints.html"
+    home_url = f"/?language={LANGUAGE_URL_PARAM.get(lang, lang)}" if lang != "en" else "/"
+
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title} - The On-Line Encyclopedia of Integer Sequences</title>
+    <title>{title} - {t("app_title", lang)}</title>
     <link rel="ai-catalog" href="/.well-known/ai-catalog.json">
     <link rel="api-catalog" href="/.well-known/api-catalog">
     <!-- MathJax pour rendu des formules LaTeX -->
@@ -126,15 +151,37 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             color: var(--text-muted);
         }}
 
-        .header-links a {{
+        /* Language Selector in Header */
+        .lang-selector {{
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.8rem;
+            flex-wrap: wrap;
+        }}
+
+        .lang-link {{
+            padding: 0.2rem 0.55rem;
+            border-radius: 4px;
             color: var(--primary);
             text-decoration: none;
-            font-size: 0.9rem;
-            margin-left: 1rem;
             font-weight: 500;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #bfdbfe;
+            transition: all 0.15s ease;
         }}
-        .header-links a:hover {{
-            text-decoration: underline;
+
+        .lang-link:hover {{
+            background: #dbeafe;
+            color: var(--oeis-blue);
+            text-decoration: none;
+        }}
+
+        .lang-link.active {{
+            background: var(--oeis-blue);
+            color: white;
+            border-color: var(--oeis-blue);
+            font-weight: 700;
         }}
 
         /* Search Bar */
@@ -552,25 +599,27 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
 <body>
     <header>
         <div class="header-top">
-            <a href="/" class="logo-area">
+            <a href="{home_url}" class="logo-area">
                 <div class="logo-icon">OEIS</div>
                 <div class="logo-text">
-                    <h1>The On-Line Encyclopedia of Integer Sequences®</h1>
-                    <span>Modern Implementation for Coders and Agents</span>
+                    <h1>{t("app_title", lang)}</h1>
+                    <span>{t("app_subtitle", lang)}</span>
                 </div>
             </a>
+            {lang_selector_html}
         </div>
         <div class="search-container">
-            <form action="/search" method="GET" class="search-form" toolname="oeis_search" tooldescription="Search integer sequences in the OEIS database by numbers, ID, author, or keyword">
-                <input type="text" name="q" value="{query}" placeholder="Search by terms (e.g. 1, 1, 2, 3, 5, 8), keyword, or sequence ID (e.g. A000045)..." class="search-input" toolparamdescription="Search query: numbers e.g. 1, 1, 2, 3, 5, 8 or ID e.g. A000045">
-                <button type="submit" class="search-btn">Search</button>
+            <form action="/search" method="GET" class="search-form" toolname="oeis_search" tooldescription="{t('search_tool_desc', lang)}">
+                {lang_hidden}
+                <input type="text" name="q" value="{query}" placeholder="{t('search_placeholder', lang)}" class="search-input" toolparamdescription="{t('search_param_desc', lang)}">
+                <button type="submit" class="search-btn">{t("search_button", lang)}</button>
             </form>
             <div class="search-hints-row">
                 <div class="search-hints">
-                    Examples: <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
+                    {t("search_examples_label", lang)} <code>1, 1, 2, 3, 5, 8</code> &bull; <code>A000045</code> &bull; <code>Fibonacci</code> &bull; <code>author:Guglielmetti</code>
                 </div>
                 <div class="search-hints-action">
-                    <a href="/hints.html">Search Hints</a>
+                    <a href="{hints_url}">&#128161; {t("search_hints", lang)}</a>
                 </div>
             </div>
         </div>
@@ -581,43 +630,44 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
     </main>
 
     <footer>
-        <p>Inspired by Neil Sloane's OEIS Foundation &bull; Implementation based on Goulib <code>Sequence</code> &bull; On-the-fly Markdown &rarr; HTML rendering</p>
+        <p>{t("footer_text", lang)}</p>
     </footer>
 
     <script>
     async function testItemf(seqId) {{
         const n = document.getElementById('itemf-n').value;
         const out = document.getElementById('test-result');
-        out.innerText = 'Computing...';
+        out.innerText = '{t("eval_computing", lang)}';
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?itemf_n=${{n}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = 'Error: ' + data.error;
+                out.innerText = '{t("error_prefix", lang)}' + data.error;
             }} else {{
                 out.innerText = `itemf(${{n}}) = ${{data.result}}`;
             }}
         }} catch(e) {{
-            out.innerText = 'Network error: ' + e.message;
+            out.innerText = '{t("network_error", lang)}' + e.message;
         }}
     }}
 
     async function testContainf(seqId) {{
         const x = document.getElementById('containf-x').value;
         const out = document.getElementById('test-result');
-        out.innerText = 'Testing...';
+        out.innerText = '{t("eval_testing", lang)}';
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?containf_x=${{x}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = 'Error: ' + data.error;
+                out.innerText = '{t("error_prefix", lang)}' + data.error;
             }} else {{
-                out.innerText = `containf(${{x}}) = ${{data.result}} (${{data.result ? 'Belongs to sequence' : 'Does NOT belong to sequence'}})`;
+                out.innerText = `containf(${{x}}) = ${{data.result}} (${{data.result ? '{t("belongs_to_sequence", lang)}' : '{t("not_belongs_to_sequence", lang)}'}})`;
             }}
         }} catch(e) {{
-            out.innerText = 'Network error: ' + e.message;
+            out.innerText = '{t("network_error", lang)}' + e.message;
         }}
     }}
+
 
     // WebMCP API tool registration for AI agents
     (function() {{
@@ -651,8 +701,10 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
 
 
 @app.get("/", response_class=HTMLResponse)
-def index_page(request: Request = None):
-    """Page d'accueil avec tableau des séquences, Link headers (RFC 8288) et support Markdown."""
+def index_page(request: Request = None, language: str = None):
+    """Page d'accueil avec tableau des séquences, Link headers (RFC 8288), support i18n et Markdown."""
+    lang = resolve_language(request, language)
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -693,14 +745,19 @@ def index_page(request: Request = None):
     # Ordre chronologique inverse de dernière modification (ou création)
     seq_list.sort(key=lambda x: (x["last_mod"], x["id"]), reverse=True)
 
+    th_number = t("col_number", lang)
+    th_title = t("col_title", lang)
+    th_terms = t("col_terms", lang)
+    th_code = t("col_code", lang)
+
     # Négociation de contenu Markdown pour agents
     if request:
         accept = request.headers.get("accept", "").lower()
         if "text/markdown" in accept:
             md_lines = [
-                "# The On-Line Encyclopedia of Integer Sequences (OEIS)\n",
-                f"{len(seq_list)} sequences listed by reverse chronological order of modification/creation.\n",
-                "| Number | Title | First terms | Code |",
+                f"# {t('app_title', lang)}\n",
+                f"{len(seq_list)} {t('sequences_count_info', lang, count=len(seq_list))}\n",
+                f"| {th_number} | {th_title} | {th_terms} | {th_code} |",
                 "| :--- | :--- | :--- | :---: |",
             ]
             for s in seq_list:
@@ -713,13 +770,15 @@ def index_page(request: Request = None):
                 headers={"x-markdown-tokens": tokens}
             )
 
+    badge_title = t("code_badge_title", lang)
     rows_html = []
     for s in seq_list:
-        code_html = '<span class="badge-code-s" title="Sequence object defined in Python">S</span>' if s["code"] == "S" else ""
+        code_html = f'<span class="badge-code-s" title="{badge_title}">S</span>' if s["code"] == "S" else ""
         escaped_name = html.escape(s["name"])
+        seq_href = f"/{s['id']}?language={LANGUAGE_URL_PARAM[lang]}" if lang != "en" else f"/{s['id']}"
         rows_html.append(f"""
         <tr>
-            <td class="col-id"><a href="/{s['id']}">{s['id']}</a></td>
+            <td class="col-id"><a href="{seq_href}">{s['id']}</a></td>
             <td class="col-title">{escaped_name}</td>
             <td class="col-terms">{s['terms']}</td>
             <td class="col-code">{code_html}</td>
@@ -728,17 +787,17 @@ def index_page(request: Request = None):
     home_content = f"""
     <div class="sequence-card">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-            <h2 style="color: var(--oeis-blue); font-size: 1.3rem; font-weight: 700; margin: 0;">Sequences</h2>
-            <span style="color: var(--text-muted); font-size: 0.85rem;"><strong>{len(seq_list)}</strong> sequences &bull; Sorted by last modification / creation</span>
+            <h2 style="color: var(--oeis-blue); font-size: 1.3rem; font-weight: 700; margin: 0;">{t("sequences_heading", lang)}</h2>
+            <span style="color: var(--text-muted); font-size: 0.85rem;"><strong>{len(seq_list)}</strong> {t("sequences_count_info", lang, count=len(seq_list))}</span>
         </div>
         <div class="sequences-table-container">
             <table class="sequences-table">
                 <thead>
                     <tr>
-                        <th style="width: 105px;">Number</th>
-                        <th>Title</th>
-                        <th style="width: 42%;">First terms</th>
-                        <th style="width: 60px; text-align: center;">Code</th>
+                        <th style="width: 105px;">{th_number}</th>
+                        <th>{th_title}</th>
+                        <th style="width: 42%;">{th_terms}</th>
+                        <th style="width: 60px; text-align: center;">{th_code}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -751,27 +810,99 @@ def index_page(request: Request = None):
     headers = {
         "Link": '</.well-known/api-catalog>; rel="api-catalog", </docs>; rel="service-doc", </openapi.json>; rel="service-desc"'
     }
-    return HTMLResponse(content=render_page("Home", home_content), headers=headers)
+    response = HTMLResponse(content=render_page(t("home", lang), home_content, lang=lang, request=request), headers=headers)
+    has_lang_param = False
+    if request:
+        try:
+            has_lang_param = bool(request.query_params.get("language") or request.query_params.get("lang"))
+        except Exception:
+            pass
+    if has_lang_param:
+        response.set_cookie("language", lang, max_age=31536000, path="/")
+    return response
 
 
 @app.get("/hints.html", response_class=HTMLResponse)
-def hints_page(request: Request = None):
-    """Page d'aide à la recherche conforme à hints.html."""
+def hints_page(request: Request = None, language: str = None):
+    """Page d'aide à la recherche conforme à hints.html avec support i18n."""
+    lang = resolve_language(request, language)
+
+    hints_i18n = {
+        "en": {
+            "title": "Search Hints and Syntax",
+            "desc": 'The search engine implements features described at <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.',
+            "h1": "1. Number sequence search",
+            "consec": "<strong>Consecutive terms</strong>: enter terms separated by commas or spaces:",
+            "single_wild": "<strong>Single term wildcard (<code>_</code>)</strong>: matches any single number:",
+            "subseq_wild": "<strong>Subsequence wildcard (<code>__</code>)</strong>: matches a sequence of terms:",
+            "h2": "2. Field prefixes",
+            "p_id": "<code>id:A000045</code>: direct sequence lookup",
+            "p_auth": "<code>author:Philippe</code>: search by author name",
+            "p_kw": "<code>keyword:core</code>: search by OEIS keyword",
+            "h3": "3. Full-text search",
+            "ft_desc": "Simple words are searched in descriptions and metadata using the FTS5 index:",
+        },
+        "fr": {
+            "title": "Aide et syntaxe de recherche",
+            "desc": 'Le moteur de recherche implémente les fonctionnalités décrites sur <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.',
+            "h1": "1. Recherche de suites de nombres",
+            "consec": "<strong>Termes consécutifs</strong> : entrez des nombres séparés par des virgules ou des espaces :",
+            "single_wild": "<strong>Joker de terme unique (<code>_</code>)</strong> : correspond à n'importe quel nombre :",
+            "subseq_wild": "<strong>Joker de sous-suite (<code>__</code>)</strong> : correspond à une suite de nombres :",
+            "h2": "2. Préfixes de champs",
+            "p_id": "<code>id:A000045</code> : accès direct à la suite",
+            "p_auth": "<code>author:Philippe</code> : recherche par nom d'auteur",
+            "p_kw": "<code>keyword:core</code> : recherche par mot-clé OEIS",
+            "h3": "3. Recherche plein texte",
+            "ft_desc": "Les mots simples sont recherchés dans les descriptions et métadonnées via l'index FTS5 :",
+        },
+        "de": {
+            "title": "Suchhinweise und Syntax",
+            "desc": 'Die Suchmaschine implementiert die auf <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a> beschriebenen Funktionen.',
+            "h1": "1. Suche nach Zahlenfolgen",
+            "consec": "<strong>Aufeinanderfolgende Terme</strong>: Geben Sie Zahlen getrennt durch Kommas oder Leerzeichen ein:",
+            "single_wild": "<strong>Einzelner Term-Platzhalter (<code>_</code>)</strong>: entspricht einer beliebigen Zahl:",
+            "subseq_wild": "<strong>Teilfolge-Platzhalter (<code>__</code>)</strong>: entspricht einer Folge von Zahlen:",
+            "h2": "2. Feldpräfixe",
+            "p_id": "<code>id:A000045</code>: direkter Aufruf der Folge",
+            "p_auth": "<code>author:Philippe</code>: Suche nach Autorenname",
+            "p_kw": "<code>keyword:core</code>: Suche nach OEIS-Schlüsselwort",
+            "h3": "3. Volltextsuche",
+            "ft_desc": "Einfache Wörter werden in Beschreibungen und Metadaten über den FTS5-Index durchsucht:",
+        },
+        "es": {
+            "title": "Consejos y sintaxis de búsqueda",
+            "desc": 'El motor de búsqueda implementa las funciones descritas en <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.',
+            "h1": "1. Búsqueda de secuencias numéricas",
+            "consec": "<strong>Términos consecutivos</strong>: ingrese términos separados por comas o espacios:",
+            "single_wild": "<strong>Comodín de término único (<code>_</code>)</strong>: coincide con cualquier número:",
+            "subseq_wild": "<strong>Comodín de subsecuencia (<code>__</code>)</strong>: coincide con una secuencia de términos:",
+            "h2": "2. Prefijos de campo",
+            "p_id": "<code>id:A000045</code>: búsqueda directa de secuencia",
+            "p_auth": "<code>author:Philippe</code>: búsqueda por nombre de autor",
+            "p_kw": "<code>keyword:core</code>: búsqueda por palabra clave de OEIS",
+            "h3": "3. Búsqueda de texto completo",
+            "ft_desc": "Las palabras simples se buscan en descripciones y metadatos utilizando el índice FTS5:",
+        },
+    }
+
+    h = hints_i18n.get(lang, hints_i18n["en"])
+
     if request:
         accept = request.headers.get("accept", "").lower()
         if "text/markdown" in accept:
             md_text = (
-                "# Search Hints and Syntax\n\n"
-                "## 1. Number sequence search\n"
+                f"# {h['title']}\n\n"
+                f"## {h['h1']}\n"
                 "- Consecutive terms: `1, 1, 2, 3, 5, 8, 13`\n"
                 "- Single term wildcard (`_`): `1, 2, _, 4, 5`\n"
                 "- Subsequence wildcard (`__`): `1, 2, __, 8, 13`\n\n"
-                "## 2. Field prefixes\n"
+                f"## {h['h2']}\n"
                 "- `id:A000045`: direct sequence lookup\n"
                 "- `author:Philippe`: search by author name\n"
                 "- `keyword:core`: search by OEIS keyword\n\n"
-                "## 3. Full-text search\n"
-                "- Simple words are searched in descriptions and metadata (e.g. `Fibonacci`, `prime`).\n"
+                f"## {h['h3']}\n"
+                "- Simple words (e.g. `Fibonacci`, `prime`).\n"
             )
             tokens = str(len(md_text.split()) * 4 // 3)
             return Response(
@@ -780,35 +911,35 @@ def hints_page(request: Request = None):
                 headers={"x-markdown-tokens": tokens}
             )
 
-    hints_content = """
+    hints_content = f"""
     <div class="sequence-card">
-        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">Search Hints and Syntax</h2>
+        <h2 style="color: var(--oeis-blue); font-size: 1.5rem; margin-bottom: 0.5rem;">{h['title']}</h2>
         <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-            The search engine implements features described at <a href="https://oeis.org/hints.html" target="_blank">oeis.org/hints.html</a>.
+            {h['desc']}
         </p>
 
-        <h3 style="color: var(--oeis-blue);">1. Number sequence search</h3>
+        <h3 style="color: var(--oeis-blue);">{h['h1']}</h3>
         <ul>
-            <li><strong>Consecutive terms</strong>: enter terms separated by commas or spaces:<br>
+            <li>{h['consec']}<br>
                 <code>1, 1, 2, 3, 5, 8, 13</code> or <code>10946, 17711, 28657</code>
             </li>
-            <li><strong>Single term wildcard (<code>_</code>)</strong>: matches any single number:<br>
+            <li>{h['single_wild']}<br>
                 <code>1, 2, _, 4, 5</code>
             </li>
-            <li><strong>Subsequence wildcard (<code>__</code>)</strong>: matches a sequence of terms:<br>
+            <li>{h['subseq_wild']}<br>
                 <code>1, 2, __, 8, 13</code>
             </li>
         </ul>
 
-        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">2. Field prefixes</h3>
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">{h['h2']}</h3>
         <ul>
-            <li><code>id:A000045</code>: direct sequence lookup</li>
-            <li><code>author:Philippe</code>: search by author name</li>
-            <li><code>keyword:core</code>: search by OEIS keyword</li>
+            <li>{h['p_id']}</li>
+            <li>{h['p_auth']}</li>
+            <li>{h['p_kw']}</li>
         </ul>
 
-        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">3. Full-text search</h3>
-        <p>Simple words are searched in descriptions and metadata using the FTS5 index:</p>
+        <h3 style="color: var(--oeis-blue); margin-top: 1.5rem;">{h['h3']}</h3>
+        <p>{h['ft_desc']}</p>
         <ul>
             <li><code>Fibonacci</code></li>
             <li><code>square numbers</code></li>
@@ -816,42 +947,47 @@ def hints_page(request: Request = None):
         </ul>
     </div>
     """
-    return render_page("Search Hints", hints_content)
+    response = HTMLResponse(content=render_page(t("search_hints", lang), hints_content, lang=lang, request=request))
+    if request and ("language" in request.query_params or "lang" in request.query_params):
+        response.set_cookie("language", lang, max_age=31536000, path="/")
+    return response
 
 
 @app.get("/search", response_class=HTMLResponse)
-def search_page(q: str = ""):
-    """Recherche conforme à hints.html via OEISSearchEngine."""
+def search_page(q: str = "", language: str = None, request: Request = None):
+    """Recherche conforme à hints.html via OEISSearchEngine avec support i18n."""
+    lang = resolve_language(request, language)
     query = q.strip()
     if not query:
-        return RedirectResponse(url="/")
+        redirect_url = f"/?language={LANGUAGE_URL_PARAM[lang]}" if lang != "en" else "/"
+        return RedirectResponse(url=redirect_url)
 
     # Si c'est un A-number direct sans préfixe
     if query.upper().startswith('A') and query[1:].isdigit():
-        return RedirectResponse(url=f"/{query.upper()}")
+        target_sid = query.upper()
+        redirect_url = f"/{target_sid}?language={LANGUAGE_URL_PARAM[lang]}" if lang != "en" else f"/{target_sid}"
+        return RedirectResponse(url=redirect_url)
 
     # Exécution de la recherche via OEISSearchEngine
     results = search_engine.search(query, limit=50)
 
-    res_html = f'<div class="sequence-card"><h2>Search results for: "{query}"</h2>'
+    res_html = f'<div class="sequence-card"><h2>{t("search_results_for", lang, query=query)}</h2>'
     if not results:
         res_html += f"""
         <p style="color: var(--text-muted); margin-top: 1rem;">
-            No sequences found for this query.
-        </p>
-        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #64748b;">
-            Tips: try fewer terms, check commas, or see <a href="/hints.html">search hints</a>.
+            {t("no_results_found", lang)}
         </p>
         """
     else:
-        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{len(results)} result(s) found (ranked by relevance score):</p>'
+        res_html += f'<p style="color: var(--text-muted); margin-bottom: 1.5rem;">{t("sequences_found", lang, count=len(results))}:</p>'
         for r in results:
             score = r.get('score', 0)
             score_badge = f'<span style="background: #e0f2fe; color: #0369a1; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.8rem; margin-left: 0.5rem;">+{score}</span>'
+            seq_href = f"/{r['id']}?language={LANGUAGE_URL_PARAM[lang]}" if lang != "en" else f"/{r['id']}"
             res_html += f"""
             <div style="border-bottom: 1px solid var(--border-color); padding: 1rem 0;">
                 <div style="font-size: 1.15rem; font-weight: 700;">
-                    <a href="/{r['id']}" style="color: var(--primary); text-decoration: none;">{r['id']}</a> : {r['name']} {score_badge}
+                    <a href="{seq_href}" style="color: var(--primary); text-decoration: none;">{r['id']}</a> : {html.escape(r['name'])} {score_badge}
                 </div>
                 <div style="font-family: monospace; font-size: 0.85rem; background: var(--code-bg); padding: 0.4rem; border-radius: 4px; margin: 0.4rem 0; overflow-wrap: anywhere; word-break: break-word;">
                     {r['terms']}
@@ -860,7 +996,10 @@ def search_page(q: str = ""):
             </div>
             """
     res_html += '</div>'
-    return render_page(f"Search: {query}", res_html, query=query)
+    response = HTMLResponse(content=render_page(t("search_results_title", lang, query=query), res_html, query=query, lang=lang, request=request))
+    if request and ("language" in request.query_params or "lang" in request.query_params):
+        response.set_cookie("language", lang, max_age=31536000, path="/")
+    return response
 
 
 @app.get("/sitemap.xml")
@@ -1199,13 +1338,15 @@ def api_create_and_serve(seq_id: str):
 
 
 @app.get("/{seq_id}", response_class=HTMLResponse)
-def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
+def sequence_page(seq_id: str, request: Request = None, direct: bool = False, language: str = None):
     """
-    Page d'affichage d'une séquence :
+    Page d'affichage d'une séquence avec support i18n :
     1. Si le fichier Markdown existe, le lit et le convertit en HTML à la volée.
     2. S'il n'existe pas, affiche immédiatement 'Please wait...' pendant l'extraction
        et la génération du fichier .md, puis recharge et sert la page HTML.
     """
+    lang = resolve_language(request, language)
+
     # Nettoyage de l'ID (ex: A45 -> A000045)
     sid = seq_id.strip().upper()
     if sid.startswith('A') and sid[1:].isdigit():
@@ -1237,12 +1378,12 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
             </noscript>
             <div class="please-wait-card">
                 <div class="spinner"></div>
-                <h2 class="please-wait-title">Sequence {sid}</h2>
+                <h2 class="please-wait-title">{t("please_wait_title", lang, sid=sid)}</h2>
                 <p class="please-wait-subtitle">
-                    This sequence entry is not yet stored locally.<br>
-                    Fetching official data from OEIS in progress...
+                    {t("please_wait_not_stored", lang)}<br>
+                    {t("please_wait_fetching", lang)}
                 </p>
-                <div class="please-wait-badge" id="wait-badge">⏳ Please wait...</div>
+                <div class="please-wait-badge" id="wait-badge">{t("please_wait_badge", lang)}</div>
                 <div id="error-container" style="display: none; margin-top: 1.5rem;"></div>
             </div>
             <script>
@@ -1265,7 +1406,7 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
                             errDiv.style.display = 'block';
                             errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600; margin-bottom: 1rem;">❌ ' + 
                                 (err.detail || "Unable to retrieve sequence from OEIS.") + 
-                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">Back to home</a>';
+                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">{t("back_to_home", lang)}</a>';
                         }}
                     }}
                 }} catch (e) {{
@@ -1282,7 +1423,7 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
             }})();
             </script>
             """
-            return render_page(f"Sequence {sid} - Please wait", loading_html, seq_id=sid)
+            return render_page(f"Sequence {sid} - Please wait", loading_html, seq_id=sid, lang=lang, request=request)
 
     # Lecture du fichier Markdown
     with open(md_file_path, "r", encoding="utf-8") as f:
@@ -1310,36 +1451,36 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
         ]
     )
 
-    # Barre d'actions & Widget interactif
+    # Barre d'actions & Widget interactif avec i18n
     actions_bar = f"""
     <div class="sequence-actions">
         <div class="btn-group">
-            <a href="/raw/{sid}.md" target="_blank">&#128196; View raw Markdown</a>
-            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; Official OEIS.org page</a>
-            <a href="/edit/{sid}">&#9998; Submit implementation</a>
+            <a href="/raw/{sid}.md" target="_blank">&#128196; {t("view_raw_markdown", lang)}</a>
+            <a href="https://oeis.org/{sid}" target="_blank" rel="noopener">&#127760; {t("official_oeis_page", lang)}</a>
+            <a href="/edit/{sid}">&#9998; {t("submit_implementation", lang)}</a>
         </div>
     </div>
     """
 
     interactive_box = f"""
     <div class="interactive-box">
-        <h4>&#9881; Live Sequence Evaluation Console</h4>
+        <h4>&#9881; {t("eval_console_title", lang)}</h4>
         <p style="font-size: 0.85rem; color: var(--text-muted);">
-            Test the <code>itemf(n)</code> and <code>containf(x)</code> functions directly in this page:
+            {t("eval_console_desc", lang)}
         </p>
         <div class="test-controls">
             <div class="test-input-group">
-                <label for="itemf-n">Compute term <em>n</em>:</label>
+                <label for="itemf-n">{t("compute_term_n", lang)}</label>
                 <input type="number" id="itemf-n" value="10" min="0" max="1000" class="test-input">
-                <button type="button" onclick="testItemf('{sid}')" class="test-button">Compute itemf(n)</button>
+                <button type="button" onclick="testItemf('{sid}')" class="test-button">{t("compute_itemf", lang)}</button>
             </div>
             <div class="test-input-group">
-                <label for="containf-x">Test value <em>x</em>:</label>
+                <label for="containf-x">{t("test_value_x", lang)}</label>
                 <input type="number" id="containf-x" value="55" class="test-input">
-                <button type="button" onclick="testContainf('{sid}')" class="test-button">Test containf(x)</button>
+                <button type="button" onclick="testContainf('{sid}')" class="test-button">{t("test_containf", lang)}</button>
             </div>
         </div>
-        <div id="test-result" class="test-output">Result ready. Click a button above.</div>
+        <div id="test-result" class="test-output">{t("eval_result_ready", lang)}</div>
     </div>
     """
 
@@ -1351,7 +1492,10 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False):
     </div>
     """
 
-    return render_page(f"{sid}", full_content, query=sid, seq_id=sid)
+    response = HTMLResponse(content=render_page(f"{sid}", full_content, query=sid, seq_id=sid, lang=lang, request=request))
+    if request and ("language" in request.query_params or "lang" in request.query_params):
+        response.set_cookie("language", lang, max_age=31536000, path="/")
+    return response
 
 
 if __name__ == "__main__":
