@@ -14,7 +14,7 @@ import math
 from itertools import count, repeat
 import goulib.itertools2 as itertools2
 from goulib import decorators
-from sequence import Sequence
+from goulib.containers import Sequence
 import goulib.math2 as math2
 
 timeout = 10  # set a default timeout for sequences' generators

@@ -2,7 +2,7 @@
 Package oeis : mini Encyclopedia of Integer Sequences en Python.
 """
 
-from .sequence import Sequence
+from goulib.containers import Sequence
 import os
 import sys
 

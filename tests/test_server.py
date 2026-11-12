@@ -310,6 +310,12 @@ class TestServerSequenceFlow(unittest.TestCase):
         res_err = asyncio.run(run_snippet("raise ValueError('SampleError')"))
         self.assertIn("ValueError: SampleError", res_err["output"])
 
+    def test_render_page_french_js_no_unescaped_quotes(self):
+        from src.server import render_page
+        html_fr = render_page("A000045", "<p>test</p>", seq_id="A000045", lang="fr")
+        self.assertNotIn("'N'appartient", html_fr)
+        self.assertIn('"N\'appartient PAS \\u00e0 la suite"', html_fr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,7 +17,6 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 
 import sys
-import subprocess
 import pygments
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import HtmlFormatter
@@ -26,6 +25,7 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
+from execution_env import python_env, sequence_env, matlab_env
 from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR, ensure_db_schema
 from search_engine import OEISSearchEngine
 from i18n import (
@@ -731,34 +731,35 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
     async function testItemf(seqId) {{
         const n = document.getElementById('itemf-n').value;
         const out = document.getElementById('test-result');
-        out.innerText = '{t("eval_computing", lang)}';
+        out.innerText = {json.dumps(t("eval_computing", lang))};
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?itemf_n=${{n}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = '{t("error_prefix", lang)}' + data.error;
+                out.innerText = {json.dumps(t("error_prefix", lang))} + data.error;
             }} else {{
                 out.innerText = `itemf(${{n}}) = ${{data.result}}`;
             }}
         }} catch(e) {{
-            out.innerText = '{t("network_error", lang)}' + e.message;
+            out.innerText = {json.dumps(t("network_error", lang))} + e.message;
         }}
     }}
 
     async function testContainf(seqId) {{
         const x = document.getElementById('containf-x').value;
         const out = document.getElementById('test-result');
-        out.innerText = '{t("eval_testing", lang)}';
+        out.innerText = {json.dumps(t("eval_testing", lang))};
         try {{
             const res = await fetch(`/api/sequence/${{seqId}}/eval?containf_x=${{x}}`);
             const data = await res.json();
             if (data.error) {{
-                out.innerText = '{t("error_prefix", lang)}' + data.error;
+                out.innerText = {json.dumps(t("error_prefix", lang))} + data.error;
             }} else {{
-                out.innerText = `containf(${{x}}) = ${{data.result}} (${{data.result ? '{t("belongs_to_sequence", lang)}' : '{t("not_belongs_to_sequence", lang)}'}})`;
+                const belongMsg = data.result ? {json.dumps(t("belongs_to_sequence", lang))} : {json.dumps(t("not_belongs_to_sequence", lang))};
+                out.innerText = `containf(${{x}}) = ${{data.result}} (${{belongMsg}})`;
             }}
         }} catch(e) {{
-            out.innerText = '{t("network_error", lang)}' + e.message;
+            out.innerText = {json.dumps(t("network_error", lang))} + e.message;
         }}
     }}
 
@@ -766,25 +767,29 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
         const runner = btn.closest('.code-runner');
         if (!runner) return;
         const code = runner.dataset.code || '';
+        const lang = runner.dataset.lang || 'python';
         const output = runner.querySelector('.run-output');
         const status = runner.querySelector('.run-status');
 
         btn.disabled = true;
-        if (status) status.innerText = '{t("run_running", lang)}';
+        if (status) status.innerText = {json.dumps(t("run_running", lang))};
         if (output) output.style.display = 'none';
 
         try {{
             const res = await fetch('/api/run_code', {{
                 method: 'POST',
                 headers: {{'Content-Type': 'application/json'}},
-                body: JSON.stringify({{code: code}})
+                body: JSON.stringify({{code: code, language: lang}})
             }});
             const data = await res.json();
+            if (data.status === 'success' && data.mode === 'external' && data.url) {{
+                window.open(data.url, '_blank', 'noopener');
+            }}
             if (output) {{
                 output.style.display = 'block';
                 if (data.status === 'success') {{
                     output.style.color = '#f8fafc';
-                    output.innerText = data.output || '{t("run_no_output", lang)}';
+                    output.innerText = data.output || {json.dumps(t("run_no_output", lang))};
                 }} else {{
                     output.style.color = '#f87171';
                     output.innerText = (data.error || data.output || 'Execution error');
@@ -795,7 +800,7 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             if (output) {{
                 output.style.display = 'block';
                 output.style.color = '#f87171';
-                output.innerText = '{t("network_error", lang)}' + e.message;
+                output.innerText = {json.dumps(t("network_error", lang))} + e.message;
             }}
             if (status) status.innerText = '';
         }} finally {{
@@ -1411,6 +1416,7 @@ def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -
 
         highlighted = highlight_code_block(raw_code.strip(), code_lang)
         is_python = code_lang in ('python', 'py')
+        is_matlab = code_lang in ('matlab', 'octave')
         has_sequence = is_python and 'Sequence(' in raw_code
 
         if has_sequence:
@@ -1437,10 +1443,11 @@ def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -
 </div>
 """
             return f'\n\n{highlighted}\n{console_html}\n\n'
-        elif is_python:
+        elif is_python or is_matlab:
             esc_code = html.escape(raw_code.strip())
+            runner_lang = 'matlab' if is_matlab else 'python'
             runner_html = f"""
-<div class="code-runner" data-code="{esc_code}">
+<div class="code-runner" data-code="{esc_code}" data-lang="{runner_lang}">
     <div class="runner-controls">
         <button type="button" class="btn-run" onclick="runSnippet(this)">
             &#9654; {t("run_button", lang)}
@@ -1511,33 +1518,15 @@ async def api_run_code(request: Request):
     if not code or not code.strip():
         return JSONResponse(status_code=400, content={"status": "error", "error": "No code provided"})
 
-    env = dict(os.environ)
-    env["PYTHONPATH"] = SRC_DIR + ":" + env.get("PYTHONPATH", "")
+    env_name = (data.get("env") or data.get("language") or "").strip().lower()
+    if env_name in ("matlab", "octave"):
+        runner = matlab_env
+    elif env_name == "sequence" or (not env_name and "Sequence(" in code):
+        runner = sequence_env
+    else:
+        runner = python_env
 
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env=env,
-            cwd=ROOT_DIR
-        )
-        output = proc.stdout or ""
-        if proc.stderr:
-            if output:
-                output += "\n--- stderr ---\n" + proc.stderr
-            else:
-                output = proc.stderr
-        return {
-            "status": "success" if proc.returncode == 0 else "error",
-            "output": output,
-            "returncode": proc.returncode
-        }
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "error": "Execution timed out (5s limit)."}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    return runner.execute(code)
 
 
 @app.get("/api/sequence/{seq_id}/eval")
@@ -1711,7 +1700,7 @@ def sequence_page(seq_id: str, request: Request = None, direct: bool = False, la
                             errDiv.style.display = 'block';
                             errDiv.innerHTML = '<div style="color: #dc2626; font-weight: 600; margin-bottom: 1rem;">❌ ' + 
                                 (err.detail || "Unable to retrieve sequence from OEIS.") + 
-                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">{t("back_to_home", lang)}</a>';
+                                '</div><a href="/" style="display: inline-block; padding: 0.4rem 1.2rem; background: var(--oeis-blue); color: white; border-radius: 6px; text-decoration: none;">' + {json.dumps(html.escape(t("back_to_home", lang)))} + '</a>';
                         }}
                     }}
                 }} catch (e) {{

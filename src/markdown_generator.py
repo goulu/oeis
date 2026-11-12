@@ -773,7 +773,7 @@ def format_sequence_markdown(data):
     # Section Implémentation Python Goulib / Sequence
     md.append("### PYTHON IMPLEMENTATION")
     if data.get('definition_code'):
-        md.append("Executable sequence implementation based on `goulib.sequence.Sequence`:\n")
+        md.append("Executable sequence implementation based on `goulib.containers.Sequence`:\n")
         if data.get('auxiliary_code'):
             md.append("#### Auxiliary functions:")
             md.append("```python")
