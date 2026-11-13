@@ -16,10 +16,26 @@ if ROOT_DIR not in sys.path:
 
 from src.execution_env import (
     ExecutionEnvironment,
-    OctaveOnlineEnvironment,
+    ExternalWebEnvironment,
+    SageMathCellEnvironment,
+    TioRunEnvironment,
+    WolframAlphaEnvironment,
+    gap_env,
+    haskell_env,
+    html_env,
+    julia_env,
+    macaulay2_env,
+    mathematica_env,
     matlab_env,
+    maxima_env,
+    octave_env,
+    pari_env,
     python_env,
+    r_env,
+    sagemath_env,
+    scala_env,
     sequence_env,
+    singular_env,
 )
 from src.server import api_run_code, render_sequence_markdown_to_html
 
@@ -107,31 +123,117 @@ class TestExecutionEnvironment(unittest.TestCase):
         )
         self.assertEqual(res_matlab["status"], "success")
         self.assertEqual(res_matlab["mode"], "external")
-        self.assertTrue(res_matlab["url"].startswith("https://octave-online.net/?code="))
+        self.assertTrue(res_matlab["url"].startswith("https://sagecell.sagemath.org/?z="))
+        self.assertIn("lang=octave", res_matlab["url"])
 
-    def test_matlab_env_octave_online(self):
-        self.assertIsInstance(matlab_env, OctaveOnlineEnvironment)
-        self.assertEqual(matlab_env.name, "matlab")
-        self.assertEqual(matlab_env.base_url, "https://octave-online.net")
+        res_mma = asyncio.run(
+            run_payload({"code": "Table[Fibonacci[n], {n, 0, 10}]", "language": "mathematica"})
+        )
+        self.assertEqual(res_mma["status"], "success")
+        self.assertEqual(res_mma["mode"], "remote")
+        self.assertIn("55", res_mma["output"])
 
-        res = matlab_env.execute("disp(fibonacci(10))")
-        self.assertEqual(res["status"], "success")
-        self.assertEqual(res["mode"], "external")
-        self.assertEqual(res["language"], "matlab")
-        self.assertIn("https://octave-online.net/?code=disp", res["url"])
+    def test_matlab_and_octave_sagecell(self):
+        for env_obj, expected_name in ((matlab_env, "matlab"), (octave_env, "octave")):
+            self.assertIsInstance(env_obj, SageMathCellEnvironment)
+            self.assertEqual(env_obj.name, expected_name)
+            self.assertEqual(env_obj.base_url, "https://sagecell.sagemath.org")
+            res = env_obj.execute("disp(fibonacci(10))")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["mode"], "external")
+            self.assertTrue(res["url"].startswith("https://sagecell.sagemath.org/?z="))
+            self.assertIn("lang=octave", res["url"])
 
         derived = matlab_env.derive("matlab-symbolic", imports=["symbolic"])
         res_derived = derived.execute("syms x; diff(x^2)")
-        self.assertIn("pkg+load+symbolic", res_derived["url"])
+        self.assertTrue(res_derived["url"].startswith("https://sagecell.sagemath.org/?z="))
+        self.assertNotEqual(res_derived["url"], res["url"])
 
         res_empty = matlab_env.execute("   ")
         self.assertEqual(res_empty["status"], "error")
+
+    def test_mathematica_env_tio_mathics(self):
+        self.assertIsInstance(mathematica_env, ExternalWebEnvironment)
+        self.assertIsInstance(mathematica_env, TioRunEnvironment)
+        self.assertEqual(mathematica_env.name, "mathematica")
+        self.assertEqual(mathematica_env.tio_lang, "mathics")
+        self.assertEqual(mathematica_env.base_url, "https://tio.run")
+
+        res = mathematica_env.execute("Fibonacci[10]")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["mode"], "remote")
+        self.assertEqual(res["language"], "mathematica")
+        self.assertEqual(res["output"], "55")
+
+        derived = mathematica_env.derive("mathematica-pkg", imports=["Combinatorica`"])
+        self.assertTrue(derived.build_eval_url("Fibonacci[10]").startswith("https://tio.run/#mathics#code="))
+        self.assertNotEqual(derived.build_eval_url("Fibonacci[10]"), res["url"])
+
+        res_empty = mathematica_env.execute("   ")
+        self.assertEqual(res_empty["status"], "error")
+
+        # Nettoyage des commentaires (* ... *) et encadrement par Print[...]
+        raw = "Table[Fibonacci[k], {k, 0, 50}] (* _Mohammad K. Azarian_, Jul 11 2015 *)"
+        self.assertEqual(
+            mathematica_env.prepare_code(raw),
+            "Print[Table[Fibonacci[k], {k, 0, 50}]]",
+        )
+        # Ne ré-encadre pas si Print[...] est déjà présent
+        with_print = "(* comment *) Print[Fibonacci[10]]"
+        self.assertEqual(
+            mathematica_env.prepare_code(with_print),
+            "Print[Fibonacci[10]]",
+        )
+
+        # Vérifie le format exact #mathics#code=...
+        import base64
+        url = mathematica_env.build_eval_url(raw)
+        b64 = url.split("#code=", 1)[1].replace("@", "+")
+        b64 += "=" * (-len(b64) % 4)
+        decoded = base64.b64decode(b64).decode("utf-8")
+        self.assertEqual(decoded, "Print[Table[Fibonacci[k], {k, 0, 50}]]")
 
     def test_render_matlab_code_block_has_runner(self):
         md = "```matlab\ndisp(1 + 1)\n```"
         rendered = render_sequence_markdown_to_html(md, "A000045", "en")
         self.assertIn('data-lang="matlab"', rendered)
         self.assertIn('class="btn-run"', rendered)
+
+    def test_execute_terms_100_and_1s_timeout(self):
+        code = "A000045 = Sequence(math2.fibonacci_gen, math2.fibonacci, math2.is_fibonacci)"
+        res = sequence_env.execute_terms(code, max_terms=100, timeout=1.0, seq_id="A000045")
+        self.assertEqual(res["status"], "success", res)
+        terms = [t.strip() for t in res["output"].strip().split(",")]
+        self.assertEqual(len(terms), 100)
+        self.assertEqual(terms[:6], ["0", "1", "1", "2", "3", "5"])
+
+        res_timeout = python_env.execute_terms("while True:\n    pass", max_terms=100, timeout=0.3)
+        self.assertEqual(res_timeout["status"], "error")
+        self.assertIn("timed out", res_timeout["error"])
+
+    def test_sagecell_and_tio_environments(self):
+        for env_obj, expected_lang in (
+            (sagemath_env, "sage"),
+            (maxima_env, "maxima"),
+            (pari_env, "gp"),
+            (gap_env, "gap"),
+            (matlab_env, "octave"),
+            (octave_env, "octave"),
+            (r_env, "r"),
+            (singular_env, "singular"),
+            (macaulay2_env, "macaulay2"),
+            (html_env, "html"),
+        ):
+            self.assertIsInstance(env_obj, SageMathCellEnvironment)
+            res = env_obj.execute("1+1")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["mode"], "external")
+            self.assertIn("https://sagecell.sagemath.org/?z=", res["url"])
+            self.assertIn(f"lang={expected_lang}", res["url"])
+
+        for env_obj in (haskell_env, julia_env, scala_env):
+            self.assertIsInstance(env_obj, TioRunEnvironment)
+            self.assertTrue(env_obj.build_eval_url("1+1").startswith(f"https://tio.run/#{env_obj.tio_lang}#code="))
 
 
 if __name__ == "__main__":

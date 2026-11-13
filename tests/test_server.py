@@ -316,6 +316,57 @@ class TestServerSequenceFlow(unittest.TestCase):
         self.assertNotIn("'N'appartient", html_fr)
         self.assertIn('"N\'appartient PAS \\u00e0 la suite"', html_fr)
 
+    def test_unified_python_implementation_and_programs_tabs(self):
+        md = (
+            "### PYTHON IMPLEMENTATION\n"
+            "#### Main definition:\n"
+            "```python\n"
+            "A000045 = Sequence(math2.fibonacci_gen, math2.fibonacci)\n"
+            "```\n"
+            "### PROGRAMS\n"
+            "#### Maple\n"
+            "```maple\n"
+            "combinat[fibonacci](n);\n"
+            "```\n"
+            "#### Other Programs\n"
+            "- **(Python)** :\n"
+            "```python\n"
+            "a = lambda n: n\n"
+            "```\n"
+        )
+        rendered = render_sequence_markdown_to_html(md, "A000045", "en")
+        self.assertEqual(rendered.count('class="code-tabs-card"'), 1)
+        self.assertEqual(rendered.count('class="code-tab-btn'), 3)
+        self.assertEqual(rendered.count('class="btn-run"'), 1)
+        self.assertEqual(rendered.count('code-tabs-output'), 1)
+        self.assertIn("Python (Sequence)", rendered)
+        self.assertIn("Maple", rendered)
+        self.assertIn("Python", rendered)
+
+    def test_unrunnable_languages_disable_run_button(self):
+        md = (
+            "### PROGRAMS\n"
+            "#### Other Programs\n"
+            "- **(Axiom)** :\n"
+            "```axiom\n"
+            "[fibonacci(n) for n in 0..10]\n"
+            "```\n"
+            "- **(Magma)** :\n"
+            "```magma\n"
+            "[Fibonacci(n): n in [0..10]];\n"
+            "```\n"
+            "- **(SageMath)** :\n"
+            "```sagemath\n"
+            "[fibonacci(n) for n in range(10)]\n"
+            "```\n"
+        )
+        rendered = render_sequence_markdown_to_html(md, "A000045", "en")
+        self.assertIn('data-lang="axiom" data-code="[fibonacci(n) for n in 0..10]" data-runnable="false"', rendered)
+        self.assertIn('data-lang="magma" data-code="[Fibonacci(n): n in [0..10]];" data-runnable="false"', rendered)
+        self.assertIn('data-lang="sagemath" data-code="[fibonacci(n) for n in range(10)]" data-runnable="true"', rendered)
+        # First tab (axiom) has no environment -> Run button is disabled
+        self.assertIn('onclick="runActiveTab(this, \'A000045\')" disabled>', rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

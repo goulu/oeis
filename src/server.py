@@ -25,7 +25,52 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from execution_env import python_env, sequence_env, matlab_env
+from execution_env import (
+    gap_env,
+    haskell_env,
+    html_env,
+    julia_env,
+    macaulay2_env,
+    mathematica_env,
+    matlab_env,
+    maxima_env,
+    octave_env,
+    pari_env,
+    python_env,
+    r_env,
+    sagemath_env,
+    scala_env,
+    sequence_env,
+    singular_env,
+)
+
+EXECUTION_ENVIRONMENTS = {
+    "python": python_env,
+    "py": python_env,
+    "sequence": sequence_env,
+    "matlab": matlab_env,
+    "octave": octave_env,
+    "mathematica": mathematica_env,
+    "mma": mathematica_env,
+    "wolfram": mathematica_env,
+    "sagemath": sagemath_env,
+    "sage": sagemath_env,
+    "maxima": maxima_env,
+    "pari": pari_env,
+    "gp": pari_env,
+    "pari/gp": pari_env,
+    "gap": gap_env,
+    "r": r_env,
+    "singular": singular_env,
+    "macaulay2": macaulay2_env,
+    "m2": macaulay2_env,
+    "html": html_env,
+    "haskell": haskell_env,
+    "hs": haskell_env,
+    "julia": julia_env,
+    "jl": julia_env,
+    "scala": scala_env,
+}
 from markdown_generator import generate_sequence_markdown, DEFAULT_DB_PATH, DEFAULT_OUTPUT_DIR, ensure_db_schema
 from search_engine import OEISSearchEngine
 from i18n import (
@@ -425,6 +470,7 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
         }}
         .btn-run:disabled {{
             background: #94a3b8;
+            opacity: 0.6;
             cursor: not-allowed;
         }}
         .run-status {{
@@ -445,6 +491,61 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
             border-left: 3px solid #0284c7;
             max-height: 320px;
             overflow-y: auto;
+        }}
+
+        /* Unified Code Tabs Card (PYTHON IMPLEMENTATION + PROGRAMS) */
+        .code-tabs-card {{
+            margin: 1.5rem 0;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #ffffff;
+            overflow: hidden;
+        }}
+        .code-tabs-nav {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            padding: 0.5rem 0.75rem 0 0.75rem;
+            background: #f1f5f9;
+            border-bottom: 1px solid var(--border-color);
+        }}
+        .code-tab-btn {{
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }}
+        .code-tab-btn:hover {{
+            background: #e2e8f0;
+            color: var(--text-main);
+        }}
+        .code-tab-btn.active {{
+            background: #ffffff;
+            color: var(--oeis-blue);
+            border-color: var(--border-color);
+            margin-bottom: -1px;
+            padding-bottom: calc(0.4rem + 1px);
+        }}
+        .code-tabs-panels {{
+            padding: 0.75rem 1rem 0.25rem 1rem;
+        }}
+        .code-tab-panel {{
+            display: none;
+        }}
+        .code-tab-panel.active {{
+            display: block;
+        }}
+        .code-tabs-controls {{
+            padding: 0 1rem 0.85rem 1rem;
+        }}
+        .code-tabs-output {{
+            margin-top: 0.5rem;
         }}
 
         .markdown-body table {{
@@ -771,15 +872,47 @@ def render_page(title: str, content_html: str, query: str = "", seq_id: str = ""
         const output = runner.querySelector('.run-output');
         const status = runner.querySelector('.run-status');
 
+        await _executeAndRender(btn, code, lang, output, status, null);
+    }}
+
+    function selectCodeTab(btn) {{
+        const card = btn.closest('.code-tabs-card');
+        if (!card) return;
+        const idx = btn.dataset.tabIndex;
+        card.querySelectorAll('.code-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tabIndex === idx));
+        card.querySelectorAll('.code-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tabIndex === idx));
+        const activePanel = card.querySelector('.code-tab-panel.active');
+        const runBtn = card.querySelector('.btn-run');
+        if (runBtn && activePanel) {{
+            runBtn.disabled = activePanel.dataset.runnable !== 'true';
+        }}
+    }}
+
+    async function runActiveTab(btn, seqId) {{
+        const card = btn.closest('.code-tabs-card');
+        if (!card) return;
+        const activePanel = card.querySelector('.code-tab-panel.active');
+        if (!activePanel) return;
+        const code = activePanel.dataset.code || '';
+        const lang = activePanel.dataset.lang || 'python';
+        const output = card.querySelector('.code-tabs-output');
+        const status = card.querySelector('.run-status');
+
+        await _executeAndRender(btn, code, lang, output, status, {{max_terms: 100, timeout: 1.0, seq_id: seqId}});
+    }}
+
+    async function _executeAndRender(btn, code, lang, output, status, extraPayload) {{
         btn.disabled = true;
         if (status) status.innerText = {json.dumps(t("run_running", lang))};
         if (output) output.style.display = 'none';
+
+        const payload = Object.assign({{code: code, language: lang}}, extraPayload || {{}});
 
         try {{
             const res = await fetch('/api/run_code', {{
                 method: 'POST',
                 headers: {{'Content-Type': 'application/json'}},
-                body: JSON.stringify({{code: code, language: lang}})
+                body: JSON.stringify(payload)
             }});
             const data = await res.json();
             if (data.status === 'success' && data.mode === 'external' && data.url) {{
@@ -1396,14 +1529,128 @@ def highlight_code_block(code: str, lang: str) -> str:
     return pygments.highlight(code, lexer, formatter)
 
 
+def _extract_code_tabs_from_section(section_name: str, section_body: str) -> list[dict[str, str]]:
+    """Extrait les blocs de code et leurs libellés depuis une section Markdown."""
+    tabs: list[dict[str, str]] = []
+    current_h4 = ""
+    current_bullet = ""
+    token_re = re.compile(
+        r'^####\s+([^\n]+)$|^-\s+\*\*\(([^)]+)\)\*\*\s*:|```([a-zA-Z0-9_\-+]+)\n(.*?)```',
+        re.MULTILINE | re.DOTALL,
+    )
+    for m in token_re.finditer(section_body):
+        if m.group(1) is not None:
+            current_h4 = m.group(1).strip().rstrip(":")
+            current_bullet = ""
+        elif m.group(2) is not None:
+            current_bullet = m.group(2).strip()
+        else:
+            code_lang = m.group(3).strip().lower()
+            raw_code = m.group(4).strip()
+            if section_name == "PYTHON IMPLEMENTATION":
+                if "auxiliary" in current_h4.lower():
+                    label = "Python (Auxiliary)"
+                elif "Sequence(" in raw_code:
+                    label = "Python (Sequence)"
+                else:
+                    label = "Python"
+            elif current_bullet:
+                label = current_bullet
+            elif current_h4 and "other" not in current_h4.lower():
+                label = current_h4
+            else:
+                label = code_lang.capitalize()
+
+            tabs.append({
+                "label": label,
+                "lang": "sequence" if (code_lang in ("python", "py") and "Sequence(" in raw_code) else code_lang,
+                "code": raw_code,
+            })
+    return tabs
+
+
+def _build_unified_programs_html(tabs: list[dict[str, str]], sid: str, lang: str) -> str:
+    """Construit un bloc HTML unique avec onglets, un seul bouton et un seul champ de résultat."""
+    counts: dict[str, int] = {}
+    nav_buttons: list[str] = []
+    panels: list[str] = []
+
+    for idx, tab in enumerate(tabs):
+        base_label = tab["label"]
+        counts[base_label] = counts.get(base_label, 0) + 1
+        display_label = base_label if counts[base_label] == 1 else f"{base_label} ({counts[base_label]})"
+        active_cls = " active" if idx == 0 else ""
+
+        nav_buttons.append(
+            f'<button type="button" class="code-tab-btn{active_cls}" '
+            f'data-tab-index="{idx}" onclick="selectCodeTab(this)">'
+            f'{html.escape(display_label)}</button>'
+        )
+
+        hl_lang = "python" if tab["lang"] == "sequence" else tab["lang"]
+        highlighted = highlight_code_block(tab["code"], hl_lang)
+        esc_code = html.escape(tab["code"])
+        esc_lang = html.escape(tab["lang"])
+        is_runnable = "true" if tab["lang"].lower() in EXECUTION_ENVIRONMENTS else "false"
+        panels.append(
+            f'<div class="code-tab-panel{active_cls}" data-tab-index="{idx}" '
+            f'data-lang="{esc_lang}" data-code="{esc_code}" data-runnable="{is_runnable}">{highlighted}</div>'
+        )
+
+    first_disabled = "" if (tabs and tabs[0]["lang"].lower() in EXECUTION_ENVIRONMENTS) else " disabled"
+
+    return f"""
+<h3>PYTHON IMPLEMENTATION &amp; PROGRAMS</h3>
+<div class="code-tabs-card">
+    <div class="code-tabs-nav">
+        {"".join(nav_buttons)}
+    </div>
+    <div class="code-tabs-panels">
+        {"".join(panels)}
+    </div>
+    <div class="code-tabs-controls">
+        <div class="runner-controls">
+            <button type="button" class="btn-run" onclick="runActiveTab(this, '{sid}')"{first_disabled}>
+                &#9654; {t("run_button", lang)} (100)
+            </button>
+            <span class="run-status"></span>
+        </div>
+        <div class="run-output code-tabs-output" style="display: none;"></div>
+    </div>
+</div>
+"""
+
+
 def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -> str:
     """
     Convertit le Markdown d'une séquence en HTML avec :
-    1. Coloration syntaxique complète via Pygments (supportant Mathematica, Maple, Python, etc.)
-    2. Bouton 'Run' sous chaque bloc de code exécutable (Python)
-    3. Console d'évaluation en direct 'Live Sequence Evaluation Console' placée sous le bloc Sequence(...)
+    1. Regroupement des sections PYTHON IMPLEMENTATION et PROGRAMS en un bloc à onglets unique
+    2. Coloration syntaxique complète via Pygments (supportant Mathematica, Maple, Python, etc.)
+    3. Un seul bouton d'évaluation (100 premiers termes, timeout 1s) et un seul champ résultat
     """
     has_sequence_widget = False
+    section_re = re.compile(
+        r'(^###\s+(PYTHON IMPLEMENTATION|PROGRAMS)\b[^\n]*\n.*?)(?=^###\s+|\Z)',
+        re.MULTILINE | re.DOTALL,
+    )
+    extracted_tabs: list[dict[str, str]] = []
+    placeholder = "UNIFIED_PROGRAMS_PLACEHOLDER_TOKEN"
+    replaced_first = False
+
+    def collect_section(m):
+        nonlocal replaced_first, has_sequence_widget
+        sec_name = m.group(2).strip()
+        sec_body = m.group(1)
+        sec_tabs = _extract_code_tabs_from_section(sec_name, sec_body)
+        if any(t_item["lang"] == "sequence" for t_item in sec_tabs):
+            has_sequence_widget = True
+        extracted_tabs.extend(sec_tabs)
+        if not replaced_first:
+            replaced_first = True
+            return f"\n\n{placeholder}\n\n"
+        return "\n\n"
+
+    working_md = section_re.sub(collect_section, md_text)
 
     def repl_fenced(m):
         nonlocal has_sequence_widget
@@ -1461,7 +1708,7 @@ def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -
         else:
             return f'\n\n{highlighted}\n\n'
 
-    processed_md = re.sub(r'```([a-zA-Z0-9_\-+]+)\n(.*?)```', repl_fenced, md_text, flags=re.DOTALL)
+    processed_md = re.sub(r'```([a-zA-Z0-9_\-+]+)\n(.*?)```', repl_fenced, working_md, flags=re.DOTALL)
     html_body = markdown.markdown(
         processed_md,
         extensions=[
@@ -1470,6 +1717,11 @@ def render_sequence_markdown_to_html(md_text: str, sid: str, lang: str = "en") -
             'markdown.extensions.toc'
         ]
     )
+
+    if extracted_tabs:
+        unified_html = _build_unified_programs_html(extracted_tabs, sid, lang)
+        html_body = html_body.replace(f"<p>{placeholder}</p>", unified_html).replace(placeholder, unified_html)
+        has_sequence_widget = True
 
     if not has_sequence_widget:
         try:
@@ -1519,14 +1771,26 @@ async def api_run_code(request: Request):
         return JSONResponse(status_code=400, content={"status": "error", "error": "No code provided"})
 
     env_name = (data.get("env") or data.get("language") or "").strip().lower()
-    if env_name in ("matlab", "octave"):
-        runner = matlab_env
-    elif env_name == "sequence" or (not env_name and "Sequence(" in code):
+    if env_name in EXECUTION_ENVIRONMENTS:
+        runner = EXECUTION_ENVIRONMENTS[env_name]
+    elif env_name and env_name != "auto":
+        return {"status": "error", "error": f"No execution environment configured for '{env_name}'."}
+    elif "Sequence(" in code:
         runner = sequence_env
     else:
         runner = python_env
 
-    return runner.execute(code)
+    max_terms = data.get("max_terms")
+    timeout = data.get("timeout")
+    seq_id = data.get("seq_id")
+    if max_terms is not None:
+        return runner.execute_terms(
+            code,
+            max_terms=int(max_terms),
+            timeout=float(timeout) if timeout is not None else 1.0,
+            seq_id=seq_id,
+        )
+    return runner.execute(code, timeout=float(timeout) if timeout is not None else None)
 
 
 @app.get("/api/sequence/{seq_id}/eval")
