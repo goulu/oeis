@@ -4,16 +4,22 @@ Environnements d'exécution locaux pour du code téléchargé (ex. extraits OEIS
 
 from __future__ import annotations
 
+import asyncio
 import base64
+from concurrent.futures import ThreadPoolExecutor
+import json
 import os
 import secrets
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+import uuid
 import zlib
 from typing import Any, Iterable
 from urllib.parse import urlencode
+
+import websockets
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = (
@@ -433,6 +439,118 @@ class SageMathCellEnvironment(ExternalWebEnvironment):
         z_param = base64.urlsafe_b64encode(compressed).decode("ascii")
         params = {"z": z_param, **self.extra_params}
         return f"{self.base_url}{self.query_path}?{urlencode(params)}"
+
+    def _format_kernel_code(self, code: str) -> str:
+        prepared = self.prepare_code(code)
+        if self.cell_lang and self.cell_lang != "sage":
+            return f"%%{self.cell_lang}\n{prepared}"
+        return prepared
+
+    async def _execute_ws(self, kernel_code: str, timeout: float) -> tuple[bool, str]:
+        data = urlencode({"accepted_tos": "true"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/kernel",
+            data=data,
+            headers={"User-Agent": "Mozilla/5.0"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            info = json.loads(resp.read().decode("utf-8"))
+
+        kid = info["id"]
+        ws_base = info.get("ws_url", self.base_url.replace("https://", "wss://").replace("http://", "ws://")).rstrip("/")
+        ws_url = f"{ws_base}/kernel/{kid}/channels"
+
+        msg_id = str(uuid.uuid4())
+        msg = {
+            "header": {
+                "msg_id": msg_id,
+                "username": "user",
+                "session": str(uuid.uuid4()),
+                "msg_type": "execute_request",
+                "version": "5.0",
+            },
+            "parent_header": {},
+            "metadata": {},
+            "content": {
+                "code": kernel_code,
+                "silent": False,
+                "store_history": False,
+                "user_expressions": {},
+                "allow_stdin": False,
+            },
+        }
+
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+        had_error = False
+
+        async with websockets.connect(ws_url, open_timeout=timeout) as ws:
+            await ws.send(json.dumps(msg))
+            while True:
+                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                m = json.loads(raw)
+                if m.get("parent_header", {}).get("msg_id") != msg_id:
+                    continue
+                mtype = m.get("msg_type") or m.get("header", {}).get("msg_type")
+                content = m.get("content", {})
+                if mtype == "stream":
+                    text = content.get("text", "")
+                    if content.get("name") == "stderr":
+                        stderr_parts.append(text)
+                    else:
+                        stdout_parts.append(text)
+                elif mtype in ("execute_result", "display_data"):
+                    plain = content.get("data", {}).get("text/plain")
+                    if plain:
+                        stdout_parts.append(plain + "\n")
+                elif mtype == "error":
+                    had_error = True
+                    ename = content.get("ename", "Error")
+                    evalue = content.get("evalue", "")
+                    stderr_parts.append(f"{ename}: {evalue}")
+                elif mtype == "status" and content.get("execution_state") == "idle":
+                    break
+
+        output = "".join(stdout_parts).strip()
+        err = "".join(stderr_parts).strip()
+        if err:
+            output = f"{output}\n--- stderr ---\n{err}" if output else err
+        return not had_error, output
+
+    def execute(self, code: str, timeout: float | None = None) -> dict[str, Any]:
+        """Exécute le code de manière transparente sur SageMathCell via WebSocket."""
+        if not code or not code.strip():
+            return {"status": "error", "error": "No code provided"}
+
+        effective_timeout = max(self.timeout, timeout or 0.0, 15.0)
+        kernel_code = self._format_kernel_code(code)
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                ok, output = pool.submit(
+                    lambda: asyncio.run(self._execute_ws(kernel_code, effective_timeout))
+                ).result(timeout=effective_timeout + 5.0)
+            return {
+                "status": "success" if ok else "error",
+                "mode": "remote",
+                "language": self.language,
+                "output": output,
+                "url": self.build_eval_url(code),
+            }
+        except Exception as e:
+            return {"status": "error", "error": f"SageMathCell request failed: {e}"}
+
+    def execute_terms(
+        self,
+        code: str,
+        *,
+        max_terms: int = 100,
+        timeout: float = 1.0,
+        seq_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Exécute le code sur SageMathCell avec le timeout réseau de l'environnement."""
+        return self.execute(code, timeout=self.timeout)
 
     def derive(
         self,

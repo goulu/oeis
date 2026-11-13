@@ -119,12 +119,11 @@ class TestExecutionEnvironment(unittest.TestCase):
         self.assertIn("24", res_seq["output"])
 
         res_matlab = asyncio.run(
-            run_payload({"code": "fibonacci(10)", "language": "matlab"})
+            run_payload({"code": "f=[0,1]; for k=3:11, f(k)=f(k-1)+f(k-2); end; disp(f(11))", "language": "matlab"})
         )
         self.assertEqual(res_matlab["status"], "success")
-        self.assertEqual(res_matlab["mode"], "external")
-        self.assertTrue(res_matlab["url"].startswith("https://sagecell.sagemath.org/?z="))
-        self.assertIn("lang=octave", res_matlab["url"])
+        self.assertEqual(res_matlab["mode"], "remote")
+        self.assertIn("55", res_matlab["output"])
 
         res_mma = asyncio.run(
             run_payload({"code": "Table[Fibonacci[n], {n, 0, 10}]", "language": "mathematica"})
@@ -138,16 +137,14 @@ class TestExecutionEnvironment(unittest.TestCase):
             self.assertIsInstance(env_obj, SageMathCellEnvironment)
             self.assertEqual(env_obj.name, expected_name)
             self.assertEqual(env_obj.base_url, "https://sagecell.sagemath.org")
-            res = env_obj.execute("disp(fibonacci(10))")
-            self.assertEqual(res["status"], "success")
-            self.assertEqual(res["mode"], "external")
-            self.assertTrue(res["url"].startswith("https://sagecell.sagemath.org/?z="))
-            self.assertIn("lang=octave", res["url"])
+            url = env_obj.build_eval_url("disp(fibonacci(10))")
+            self.assertTrue(url.startswith("https://sagecell.sagemath.org/?z="))
+            self.assertIn("lang=octave", url)
 
         derived = matlab_env.derive("matlab-symbolic", imports=["symbolic"])
-        res_derived = derived.execute("syms x; diff(x^2)")
-        self.assertTrue(res_derived["url"].startswith("https://sagecell.sagemath.org/?z="))
-        self.assertNotEqual(res_derived["url"], res["url"])
+        derived_url = derived.build_eval_url("syms x; diff(x^2)")
+        self.assertTrue(derived_url.startswith("https://sagecell.sagemath.org/?z="))
+        self.assertNotEqual(derived_url, matlab_env.build_eval_url("syms x; diff(x^2)"))
 
         res_empty = matlab_env.execute("   ")
         self.assertEqual(res_empty["status"], "error")
@@ -225,11 +222,14 @@ class TestExecutionEnvironment(unittest.TestCase):
             (html_env, "html"),
         ):
             self.assertIsInstance(env_obj, SageMathCellEnvironment)
-            res = env_obj.execute("1+1")
-            self.assertEqual(res["status"], "success")
-            self.assertEqual(res["mode"], "external")
-            self.assertIn("https://sagecell.sagemath.org/?z=", res["url"])
-            self.assertIn(f"lang={expected_lang}", res["url"])
+            url = env_obj.build_eval_url("1+1")
+            self.assertIn("https://sagecell.sagemath.org/?z=", url)
+            self.assertIn(f"lang={expected_lang}", url)
+
+        res_gap = gap_env.execute("Fib:=[0,1];; for n in [3..10] do Fib[n]:=Fib[n-1]+Fib[n-2]; od; Fib;")
+        self.assertEqual(res_gap["status"], "success", res_gap)
+        self.assertEqual(res_gap["mode"], "remote")
+        self.assertIn("34", res_gap["output"])
 
         for env_obj in (haskell_env, julia_env, scala_env):
             self.assertIsInstance(env_obj, TioRunEnvironment)

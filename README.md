@@ -1,17 +1,18 @@
-# Python OEIS & Collaborative Sequence Platform
+# OEIS : Modern Implementation for Coders and Agents
 
-A Python framework and modern web application for infinite integer sequences inspired by Neil Sloane's **[The On-Line Encyclopedia of Integer Sequences (OEIS)](https://oeis.org/)**.
+A Python framework, interactive web application, and agent-ready platform for infinite integer sequences inspired by Neil Sloane's **[The On-Line Encyclopedia of Integer Sequences (OEIS)](https://oeis.org/)**.
 
-This platform combines functional Python abstractions for infinite series with a crowdsourcing-ready architecture, automated Markdown sheet generation, and a high-performance integer search engine implementing the query syntax of **[oeis.org/hints.html](https://oeis.org/hints.html)**.
+This platform combines functional Python abstractions for infinite series (`Sequence`) with a crowdsourcing-ready SQLite/Markdown architecture, a high-performance integer search engine implementing **[oeis.org/hints.html](https://oeis.org/hints.html)**, transparent multi-language code execution, and machine-readable endpoints for AI agents (`text/markdown` negotiation, API Catalog, MCP Server Card, A2A Agent Card).
 
 ---
 
 ## Table of Contents
 
 - [Core Concept: The Three Pillars of `Sequence`](#core-concept-the-three-pillars-of-sequence)
-- [Search Engine Architecture (hints.html & Russ Cox's Design)](#search-engine-architecture)
-- [Database Schema (`create.sql`)](#database-schema)
+- [Search Engine Architecture](#search-engine-architecture)
+- [Database Schema (`create.sql`)](#database-schema-createsql)
 - [On-The-Fly Markdown & Web Server](#on-the-fly-markdown--web-server)
+- [Supported Languages & Execution Environments](#supported-languages--execution-environments)
 - [Project Directory Structure](#project-directory-structure)
 - [Quick Start](#quick-start)
 - [References & Academic Context](#references--academic-context)
@@ -107,8 +108,38 @@ Each generated Markdown sheet mirrors the canonical OEIS layout:
 * **PYTHON IMPLEMENTATION**: Formatted code block showing the `Sequence` instantiation and method breakdown.
 * **CROSSREFERENCES**: Links to adjacent and related sequences.
 
-### On-The-Fly HTML Conversion
-The FastAPI server ([`src/server.py`](src/server.py)) reads the static Markdown files and transforms them into modern, responsive HTML pages on-the-fly. It embeds an **interactive Python test console** allowing users to evaluate `itemf(n)` and `containf(x)` directly in their browser.
+### On-The-Fly HTML Conversion & Agent Support
+The FastAPI server ([`src/server.py`](src/server.py)) reads the static Markdown files and transforms them into modern, responsive HTML pages on-the-fly with multilingual UI support (`en`, `fr`, `de`, `es`), MathJax rendering, Pygments syntax highlighting, and an interactive **Live Sequence Evaluation Console** (`itemf(n)` and `containf(x)`).
+
+For AI agents and automated clients, the server also exposes:
+* `Accept: text/markdown` content negotiation on sequence, index, and hints pages
+* `/.well-known/api-catalog` (RFC 9727), `/.well-known/ai-catalog.json`, `/.well-known/mcp/server-card.json`, and `/.well-known/agent-card.json`
+
+---
+
+## Supported Languages & Execution Environments
+
+Sequence pages group **`PYTHON IMPLEMENTATION`** and **`PROGRAMS`** into a single tabbed code viewer with one shared **Run (100)** button and a unified output panel. Execution is handled by [`src/execution_env.py`](src/execution_env.py):
+
+| Language | Environment Class | Execution Mode | Backend / Preloaded Modules |
+| :--- | :--- | :--- | :--- |
+| **Python** | `ExecutionEnvironment` (`python_env`) | Local subprocess (1s timeout for 100 terms) | Standard `math`, `itertools` |
+| **Python `Sequence`** | `ExecutionEnvironment` (`sequence_env`) | Local subprocess (1s timeout for 100 terms) | `math`, `itertools`, `goulib.math2`, `goulib.itertools2`, `goulib.containers.Sequence` |
+| **SageMath** | `SageMathCellEnvironment` (`sagemath_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=sage`) |
+| **Maxima** | `SageMathCellEnvironment` (`maxima_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=maxima`) |
+| **PARI / GP** | `SageMathCellEnvironment` (`pari_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=gp`) |
+| **GAP** | `SageMathCellEnvironment` (`gap_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=gap`) |
+| **Matlab / Octave** | `SageMathCellEnvironment` (`matlab_env`, `octave_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=octave`) |
+| **R** | `SageMathCellEnvironment` (`r_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=r`) |
+| **Singular** | `SageMathCellEnvironment` (`singular_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=singular`) |
+| **Macaulay2** | `SageMathCellEnvironment` (`macaulay2_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=macaulay2`) |
+| **HTML** | `SageMathCellEnvironment` (`html_env`) | Transparent remote WebSocket | [SageMathCell](https://sagecell.sagemath.org/) (`lang=html`) |
+| **Mathematica (Mathics)** | `MathicsTioEnvironment` (`mathematica_env`) | Transparent remote HTTP API | [Try It Online](https://tio.run/#mathics) (strips `(* ... *)` comments & wraps in `Print[...]` if needed) |
+| **Haskell** | `TioRunEnvironment` (`haskell_env`) | Transparent remote HTTP API | [Try It Online](https://tio.run/) (`haskell-ghc`) |
+| **Julia** | `TioRunEnvironment` (`julia_env`) | Transparent remote HTTP API | [Try It Online](https://tio.run/) (`julia`) |
+| **Scala** | `TioRunEnvironment` (`scala_env`) | Transparent remote HTTP API | [Try It Online](https://tio.run/) (`scala`) |
+
+Languages without an online stateless execution backend (**Axiom**, **Magma**, **Maple**, etc.) remain syntax-highlighted with Pygments, and the **Run** button is automatically disabled (greyed out).
 
 ---
 
@@ -118,15 +149,20 @@ The FastAPI server ([`src/server.py`](src/server.py)) reads the static Markdown 
 oeis/
 ├── src/                          # Application source code
 │   ├── __init__.py               # Python package initialization
-│   ├── sequence.py               # Core Sequence abstraction (iterf, itemf, containf)
-│   ├── oeis.py                   # Catalogue of 270+ implemented OEIS sequences
+│   ├── oeis.py                   # Catalogue of implemented OEIS sequences
 │   ├── database.py               # Database connector & RLE compression routines
+│   ├── execution_env.py          # Local & remote code execution environments
 │   ├── search_engine.py          # hints.html query parser, 3-gram & FTS5 search engine
 │   ├── markdown_generator.py     # Database-to-Markdown sheet exporter
+│   ├── i18n.py                   # Multilingual UI helpers (en, fr, de, es)
+│   ├── locales/                  # Translation JSON catalogs
 │   ├── server.py                 # FastAPI web application (on-the-fly Markdown-to-HTML)
 │   └── init_db.py                # Database population & AST source code extractor
 ├── tests/                        # Automated test suite
-│   └── test_oeis.py              # Verification against reference OEIS b-files
+│   ├── test_oeis.py              # Verification against reference OEIS b-files
+│   ├── test_execution_env.py     # Unit & integration tests for execution environments
+│   ├── test_markdown_generator.py
+│   └── test_server.py            # Web server, i18n & unified tabs tests
 ├── seq/                          # Generated Markdown sheets (A000045.md, etc.)
 ├── create.sql                    # Relational and FTS5 database schema
 ├── design.md                     # Comprehensive architecture and security specification
